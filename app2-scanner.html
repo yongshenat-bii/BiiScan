@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>QR Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #F0FDFA;
+  color: #1F2937;
+  min-width: 375px;
+  min-height: 100dvh;
+}
+
+/* ── Screen containers ── */
+.screen { display: none; }
+.screen.active { display: flex; flex-direction: column; min-height: 100dvh; }
+
+/* ── HTTPS Warning Banner ── */
+.https-banner {
+  background: #FEF3C7; border-bottom: 2px solid #F59E0B;
+  padding: 12px 16px; font-size: 0.82rem; color: #92400E;
+  position: relative;
+}
+.https-banner .dismiss { position: absolute; top: 8px; right: 12px; background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #92400E; }
+.spinner {
+  display: inline-block; width: 28px; height: 28px;
+  border: 3px solid #CCFBF1; border-top-color: #0F6E56;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Screen 1: Load Bundle ── */
+.load-screen {
+  align-items: center; justify-content: center; padding: 24px;
+}
+.load-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+  padding: 32px 24px; max-width: 400px; width: 100%; text-align: center;
+}
+.load-card h1 { color: #0F6E56; font-size: 1.5rem; margin-bottom: 8px; }
+.load-card p { font-size: 0.85rem; color: #6B7280; margin-bottom: 20px; }
+.load-card .tip {
+  background: #F0FDFA; border: 1px solid #CCFBF1; border-radius: 8px;
+  padding: 12px; font-size: 0.8rem; color: #0F6E56; margin-top: 16px; text-align: left;
+}
+
+/* ── Screen 2: Passcode ── */
+.passcode-screen {
+  align-items: center; justify-content: center; padding: 24px;
+  background: #F0FDFA;
+}
+.passcode-card {
+  background: #fff; border-radius: 12px; padding: 32px 24px;
+  max-width: 360px; width: 100%; text-align: center;
+}
+.passcode-card h2 { color: #0F6E56; margin-bottom: 16px; }
+.passcode-input {
+  width: 100%; text-align: center; font-size: 2rem; font-weight: 700;
+  letter-spacing: 0.3em; padding: 12px; border: 2px solid #D1D5DB;
+  border-radius: 8px; font-family: monospace; text-transform: uppercase;
+  outline: none; transition: border-color 0.2s;
+}
+.passcode-input:focus { border-color: #0F6E56; }
+.passcode-input.error { border-color: #DC2626; animation: shake 0.4s; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%,60% { transform: translateX(-8px); }
+  40%,80% { transform: translateX(8px); }
+}
+.passcode-error { color: #DC2626; font-size: 0.85rem; margin-top: 8px; min-height: 1.2em; }
+
+/* ── Screen 3: Scanner ── */
+.scanner-screen { background: #F0FDFA; }
+.scanner-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: #0F6E56; color: #fff;
+}
+.scanner-header h1 { font-size: 1.1rem; }
+.scanner-counter {
+  background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px;
+  font-size: 0.85rem; font-weight: 600;
+}
+.camera-select-row { padding: 8px 16px; background: #fff; border-bottom: 1px solid #E5E7EB; }
+.camera-select-row select { width: 100%; padding: 8px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.85rem; }
+.scanner-viewport {
+  position: relative; margin: 12px 16px; border-radius: 12px; overflow: hidden;
+  background: #000; aspect-ratio: 1;
+}
+#reader { width: 100%; }
+#reader video { border-radius: 12px; }
+.scan-status { text-align: center; padding: 8px; font-size: 0.85rem; color: #6B7280; }
+.scanner-actions { display: flex; gap: 8px; padding: 12px 16px; }
+.manual-input-row { padding: 0 16px 12px; display: none; }
+.manual-input-row input { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.85rem; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 18px; border: none; border-radius: 8px;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; flex: 1;
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-teal { background: #0F6E56; color: #fff; }
+.btn-green { background: #16A34A; color: #fff; }
+.btn-gray { background: #6B7280; color: #fff; }
+.btn-secondary { background: #E5E7EB; color: #374151; }
+
+/* ── Confirmation Modal ── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  z-index: 200; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 12px; max-width: 380px; width: 100%;
+  overflow: hidden;
+}
+.modal-title {
+  padding: 16px; text-align: center; font-size: 1rem; font-weight: 600;
+  background: #F9FAFB; border-bottom: 1px solid #E5E7EB; color: #374151;
+}
+.modal-primary {
+  padding: 16px; text-align: center; font-size: 1.4rem; font-weight: 700;
+  color: #0F6E56; border-bottom: 1px solid #E5E7EB;
+}
+.modal-fields { padding: 12px 16px; }
+.modal-field-row {
+  display: flex; padding: 6px 0; font-size: 0.88rem;
+  border-bottom: 1px solid #F3F4F6;
+}
+.modal-field-row:last-child { border-bottom: none; }
+.modal-field-label { color: #6B7280; width: 120px; flex-shrink: 0; font-weight: 500; }
+.modal-field-value { color: #1F2937; flex: 1; word-break: break-word; }
+.modal-actions { display: flex; border-top: 1px solid #E5E7EB; }
+.modal-actions .btn { border-radius: 0; flex: 1; padding: 14px; font-size: 1rem; }
+
+/* ── Log Panel ── */
+.log-panel {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0;
+  background: #fff; border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.15); z-index: 150;
+  max-height: 70vh; overflow: hidden;
+  flex-direction: column;
+}
+.log-panel.open { display: flex; }
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px; border-bottom: 1px solid #E5E7EB; flex-shrink: 0;
+}
+.log-header h3 { font-size: 1rem; color: #374151; }
+.log-header .close-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #6B7280; }
+.log-list { overflow-y: auto; flex: 1; padding: 0 16px 16px; }
+.log-list table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.log-list th, .log-list td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; text-align: left; }
+.log-list th { font-weight: 600; color: #6B7280; position: sticky; top: 0; background: #fff; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 8px; font-size: 0.85rem;
+  z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  max-width: 90vw; text-align: center;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: #16A34A; color: #fff; }
+.toast.warning { background: #F59E0B; color: #fff; }
+.toast.error { background: #DC2626; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- HTTPS Warning -->
+<div class="https-banner" id="httpsBanner" style="display:none;">
+  <button class="dismiss" onclick="document.getElementById('httpsBanner').style.display='none'">&times;</button>
+  <strong>Camera access requires HTTPS on iOS.</strong><br>
+  Options: (1) Serve via VS Code Live Server or <code>python -m http.server</code>,
+  (2) Host on GitHub Pages or Netlify Drop.<br>
+  Android Chrome works on file:// without this requirement.
+</div>
+
+<!-- Screen 1: Load Bundle -->
+<div class="screen load-screen active" id="screen1">
+    <div class="load-card">
+      <h1>QR Scanner</h1>
+      <p>Load the bundle file exported from the QR Generator to begin scanning.</p>
+      <label class="btn btn-teal" id="loadBtn" style="flex:none;display:inline-flex;cursor:pointer;">
+        Load bundle.json
+        <input type="file" id="bundleInput" accept=".json" style="display:none;">
+      </label>
+      <div id="loadStatus" style="margin-top:12px;min-height:2.5em;">
+        <div id="loadSpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div>
+          <p style="font-size:0.82rem;color:#0F6E56;margin-top:4px;">Loading bundle...</p>
+        </div>
+        <div id="loadError" style="color:#DC2626;font-size:0.85rem;"></div>
+        <div id="loadSuccess" style="color:#16A34A;font-size:0.85rem;display:none;"></div>
+      </div>
+      <div class="tip">
+        <strong>Transfer tip:</strong> Send <code>bundle.json</code> from your laptop via AirDrop, email, or messaging app (WhatsApp / Telegram).
+      </div>
+    </div>
+</div>
+
+<!-- Screen 2: Passcode -->
+<div class="screen passcode-screen" id="screen2">
+  <div class="passcode-card">
+    <h2>Enter Passcode</h2>
+    <p style="font-size:0.85rem;color:#6B7280;margin-bottom:16px;">Enter the 5-character passcode to unlock scanning.</p>
+    <input type="text" class="passcode-input" id="passcodeInput" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    <div class="passcode-error" id="passcodeError"></div>
+    <button class="btn btn-teal" style="margin-top:12px;flex:none;width:100%;" onclick="verifyPasscode()">Unlock</button>
+  </div>
+</div>
+
+<!-- Screen 3: Scanner -->
+<div class="screen scanner-screen" id="screen3">
+  <div class="scanner-header">
+    <h1>QR Scanner</h1>
+    <div class="scanner-counter" id="scannerCounter">0 / 0</div>
+  </div>
+  <div class="camera-select-row">
+    <select id="cameraSelect"><option>Loading cameras...</option></select>
+  </div>
+  <div class="scanner-viewport">
+    <div id="reader"></div>
+  </div>
+  <div class="scan-status" id="scanStatus">Initialising camera...</div>
+  <div class="manual-input-row" id="manualRow">
+    <input type="text" id="manualInput" placeholder="Paste QR content here and press Enter">
+  </div>
+  <div class="scanner-actions">
+    <button class="btn btn-secondary" onclick="openLog()">View Log</button>
+    <button class="btn btn-teal" onclick="exportLog()">Export Log</button>
+  </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal-backdrop" id="confirmModal">
+  <div class="modal">
+    <div class="modal-title">Confirm Collection</div>
+    <div class="modal-primary" id="modalPrimary"></div>
+    <div class="modal-fields" id="modalFields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-gray" onclick="cancelCollection()">Cancel</button>
+      <button class="btn btn-green" onclick="confirmCollection()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log Panel -->
+<div class="log-panel" id="logPanel">
+  <div class="log-header">
+    <h3 id="logTitle">Collection Log</h3>
+    <button class="close-btn" onclick="closeLog()">&times;</button>
+  </div>
+  <div class="log-list" id="logList"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let bundle = null;
+let scanner = null;
+let pendingRow = null;
+let modalOpen = false;
+let scanning = false;
+let currentCameraId = null;
+
+// ── Init ──
+(function init() {
+  // HTTPS check
+  if (window.location.protocol === 'file:') {
+    document.getElementById('httpsBanner').style.display = 'block';
+  }
+
+  // Check sessionStorage for existing bundle
+  const stored = sessionStorage.getItem('qr_bundle');
+  if (stored) {
+    try {
+      bundle = JSON.parse(stored);
+      if (validateBundle(bundle)) {
+        showScreen(2);
+        return;
+      }
+    } catch (e) {}
+    sessionStorage.removeItem('qr_bundle');
+  }
+})();
+
+// ── Toast ──
+function showToast(msg, type = 'success', ms = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ── Screen navigation ──
+function showScreen(num) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen' + num).classList.add('active');
+  if (num === 2) {
+    setTimeout(() => document.getElementById('passcodeInput').focus(), 100);
+  }
+  if (num === 3) {
+    updateCounter();
+    initScanner();
+  }
+}
+
+// ── Screen 1: Load Bundle ──
+document.getElementById('bundleInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const errEl = document.getElementById('loadError');
+  const spinnerEl = document.getElementById('loadSpinner');
+  const successEl = document.getElementById('loadSuccess');
+  const loadBtn = document.getElementById('loadBtn');
+
+  errEl.textContent = '';
+  successEl.style.display = 'none';
+  spinnerEl.style.display = 'block';
+  loadBtn.style.opacity = '0.5';
+  loadBtn.style.pointerEvents = 'none';
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!validateBundle(data)) {
+        spinnerEl.style.display = 'none';
+        loadBtn.style.opacity = '1';
+        loadBtn.style.pointerEvents = 'auto';
+        errEl.textContent = 'Invalid bundle: must contain version, passcode, and rows.';
+        return;
+      }
+      bundle = data;
+      sessionStorage.setItem('qr_bundle', JSON.stringify(bundle));
+      spinnerEl.style.display = 'none';
+      successEl.textContent = `Loaded ${bundle.rows.length} rows. Redirecting...`;
+      successEl.style.display = 'block';
+      setTimeout(() => showScreen(2), 600);
+    } catch (err) {
+      spinnerEl.style.display = 'none';
+      loadBtn.style.opacity = '1';
+      loadBtn.style.pointerEvents = 'auto';
+      errEl.textContent = 'Could not parse JSON. Expected format: { version, passcode, rows: [...] }';
+    }
+  };
+  reader.onerror = () => {
+    spinnerEl.style.display = 'none';
+    loadBtn.style.opacity = '1';
+    loadBtn.style.pointerEvents = 'auto';
+    errEl.textContent = 'Error reading file.';
+  };
+  reader.readAsText(file);
+});
+
+function validateBundle(data) {
+  return data && typeof data.version === 'number' && typeof data.passcode === 'string' && Array.isArray(data.rows);
+}
+
+// ── Screen 2: Passcode ──
+document.getElementById('passcodeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') verifyPasscode();
+});
+
+function verifyPasscode() {
+  const input = document.getElementById('passcodeInput');
+  const val = input.value.trim().toUpperCase();
+  if (val === bundle.passcode) {
+    document.getElementById('passcodeError').textContent = '';
+    showScreen(3);
+  } else {
+    input.classList.add('error');
+    document.getElementById('passcodeError').textContent = 'Incorrect passcode';
+    setTimeout(() => input.classList.remove('error'), 500);
+  }
+}
+
+// ── Screen 3: Scanner ──
+function updateCounter() {
+  const collected = bundle.rows.filter(r => r.collected).length;
+  document.getElementById('scannerCounter').textContent = `${collected} / ${bundle.rows.length}`;
+}
+
+async function initScanner() {
+  const readerEl = document.getElementById('reader');
+  if (scanner) {
+    try { await scanner.stop(); } catch (e) {}
+  }
+
+  try {
+    const devices = await Html5Qrcode.getCameras();
+    if (!devices || devices.length === 0) {
+      showCameraFallback('No cameras found');
+      return;
+    }
+
+    const sel = document.getElementById('cameraSelect');
+    sel.innerHTML = '';
+    devices.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value = d.id;
+      opt.textContent = d.label || `Camera ${i + 1}`;
+      sel.appendChild(opt);
+    });
+
+    // Prefer rear camera
+    const rear = devices.find(d => /back|rear|environment/i.test(d.label));
+    if (rear) sel.value = rear.id;
+
+    sel.addEventListener('change', () => startCamera(sel.value));
+    startCamera(sel.value);
+  } catch (err) {
+    showCameraFallback('Camera permission denied');
+  }
+}
+
+function showCameraFallback(reason) {
+  document.getElementById('scanStatus').textContent = reason + ' — use manual input below.';
+  document.getElementById('manualRow').style.display = 'block';
+  const manualInput = document.getElementById('manualInput');
+  manualInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && manualInput.value.trim()) {
+      handleQRResult(manualInput.value.trim());
+      manualInput.value = '';
+    }
+  });
+}
+
+async function startCamera(cameraId) {
+  if (scanner) {
+    try { await scanner.stop(); } catch (e) {}
+  }
+  currentCameraId = cameraId;
+  scanner = new Html5Qrcode('reader');
+  scanning = true;
+  document.getElementById('scanStatus').textContent = 'Scanning...';
+
+  try {
+    await scanner.start(
+      cameraId,
+      { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+      onScanSuccess,
+      () => {} // ignore failures
+    );
+  } catch (err) {
+    showCameraFallback('Could not start camera');
+  }
+}
+
+async function resumeScanner() {
+  if (!scanning || !currentCameraId) return;
+  try {
+    const state = scanner.getState();
+    // State 3 = PAUSED, State 1 = NOT_STARTED
+    if (state === 3) {
+      scanner.resume();
+    } else if (state === 1) {
+      await startCamera(currentCameraId);
+    }
+  } catch (e) {
+    // If resume fails, try restarting
+    try { await startCamera(currentCameraId); } catch (e2) {}
+  }
+  document.getElementById('scanStatus').textContent = 'Scanning...';
+}
+
+async function pauseScanner() {
+  try {
+    if (scanner && scanner.getState() === 2) { // SCANNING
+      scanner.pause(true);
+    }
+  } catch (e) {}
+}
+
+// ── QR Decode Logic ──
+function onScanSuccess(decodedText) {
+  if (modalOpen) return; // debounce
+  handleQRResult(decodedText);
+}
+
+function handleQRResult(text) {
+  if (modalOpen) return;
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    showToast('Unrecognised QR code', 'error');
+    return;
+  }
+
+  if (!data.id || !data.payload) {
+    showToast('Unrecognised QR code', 'error');
+    return;
+  }
+
+  const row = bundle.rows.find(r => r.id === data.id);
+  if (!row) {
+    showToast('Unrecognised QR code', 'error');
+    return;
+  }
+
+  if (row.collected) {
+    const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+    showToast('Already collected \u2014 ' + label, 'warning');
+    return;
+  }
+
+  // Match found, not collected — show confirmation
+  pendingRow = row;
+  showConfirmModal(row);
+}
+
+// ── Confirmation Modal ──
+function showConfirmModal(row) {
+  modalOpen = true;
+  pauseScanner();
+
+  const primaryVal = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+  document.getElementById('modalPrimary').textContent = primaryVal;
+
+  const fieldsDiv = document.getElementById('modalFields');
+  fieldsDiv.innerHTML = '';
+  const displayOrder = bundle.displayFields || Object.keys(row.display);
+  displayOrder.forEach(field => {
+    if (field === bundle.primaryField) return; // already shown as heading
+    const val = row.display[field];
+    if (val === undefined) return;
+    const rowEl = document.createElement('div');
+    rowEl.className = 'modal-field-row';
+    rowEl.innerHTML = `<div class="modal-field-label">${escHtml(field)}</div><div class="modal-field-value">${escHtml(val || '\u2014')}</div>`;
+    fieldsDiv.appendChild(rowEl);
+  });
+
+  document.getElementById('confirmModal').classList.add('open');
+}
+
+function confirmCollection() {
+  if (!pendingRow) return;
+  pendingRow.collected = true;
+  pendingRow.collectedAt = new Date().toISOString();
+  sessionStorage.setItem('qr_bundle', JSON.stringify(bundle));
+  updateCounter();
+
+  const label = pendingRow.display[bundle.primaryField] || Object.values(pendingRow.display)[0] || '';
+  closeModal();
+  showToast('Collected: ' + label, 'success');
+}
+
+function cancelCollection() {
+  pendingRow = null;
+  closeModal();
+}
+
+function closeModal() {
+  modalOpen = false;
+  pendingRow = null;
+  document.getElementById('confirmModal').classList.remove('open');
+  setTimeout(() => resumeScanner(), 300);
+}
+
+// ── Log Panel ──
+function openLog() {
+  const collected = bundle.rows.filter(r => r.collected).sort((a, b) => {
+    if (!a.collectedAt) return 1;
+    if (!b.collectedAt) return -1;
+    return new Date(a.collectedAt) - new Date(b.collectedAt);
+  });
+
+  document.getElementById('logTitle').textContent = `${collected.length} of ${bundle.rows.length} collected`;
+
+  let html = '<table><thead><tr><th>#</th><th>Primary</th><th>Collected at</th></tr></thead><tbody>';
+  if (collected.length === 0) {
+    html += '<tr><td colspan="3" style="text-align:center;color:#6B7280;padding:20px;">No items collected yet</td></tr>';
+  } else {
+    collected.forEach(row => {
+      const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+      const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
+      html += `<tr><td>${row.id}</td><td>${escHtml(label)}</td><td>${time}</td></tr>`;
+    });
+  }
+  html += '</tbody></table>';
+  document.getElementById('logList').innerHTML = html;
+  document.getElementById('logPanel').classList.add('open');
+}
+
+function closeLog() {
+  document.getElementById('logPanel').classList.remove('open');
+}
+
+// ── Export Audit Log ──
+function exportLog() {
+  if (!bundle) return;
+
+  // 1. audit-log.csv
+  const allHeaders = bundle.headers || Object.keys(bundle.rows[0]?.payload || {});
+  let csv = ['id', ...allHeaders, 'collected', 'collectedAt'].join(',') + '\n';
+  bundle.rows.forEach(row => {
+    const vals = [row.id];
+    allHeaders.forEach(h => {
+      const v = row.payload[h] ?? row.display[h] ?? '';
+      vals.push('"' + String(v).replace(/"/g, '""') + '"');
+    });
+    vals.push(row.collected ? 'true' : 'false');
+    vals.push(row.collectedAt || '');
+    csv += vals.join(',') + '\n';
+  });
+  downloadFile('audit-log.csv', 'text/csv', csv);
+
+  // 2. bundle-updated.json
+  const updatedBundle = JSON.stringify(bundle, null, 2);
+  downloadFile('bundle-updated.json', 'application/json', updatedBundle);
+
+  showToast('Audit log + updated bundle exported', 'success');
+}
+
+// ── Helpers ──
+function downloadFile(name, type, content) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
