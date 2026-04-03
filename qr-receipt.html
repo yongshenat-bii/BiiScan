@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your QR Code</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #F3F0FF;
+  color: #1F2937;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.receipt {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  max-width: 420px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.receipt-header {
+  background: #7C3AED;
+  color: #fff;
+  padding: 24px 24px 20px;
+  text-align: center;
+}
+.receipt-header h1 { font-size: 1.3rem; margin-bottom: 4px; }
+.receipt-header .subtitle { font-size: 0.82rem; opacity: 0.8; }
+
+.receipt-qr {
+  display: flex;
+  justify-content: center;
+  padding: 28px 24px 16px;
+}
+.receipt-qr #qrcode { display: inline-block; }
+.receipt-qr #qrcode canvas, .receipt-qr #qrcode img { border-radius: 8px; }
+
+.receipt-primary {
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #7C3AED;
+  padding: 0 24px 16px;
+  word-break: break-word;
+}
+
+.receipt-divider {
+  border: none;
+  border-top: 2px dashed #E5E7EB;
+  margin: 0 24px;
+}
+
+.receipt-fields {
+  padding: 16px 24px;
+}
+.receipt-field {
+  display: flex;
+  padding: 8px 0;
+  border-bottom: 1px solid #F3F4F6;
+  font-size: 0.9rem;
+}
+.receipt-field:last-child { border-bottom: none; }
+.receipt-field-label {
+  color: #6B7280;
+  width: 130px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.receipt-field-value {
+  color: #1F2937;
+  flex: 1;
+  word-break: break-word;
+  font-weight: 600;
+}
+
+.receipt-footer {
+  background: #F9FAFB;
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: #9CA3AF;
+  border-top: 1px solid #E5E7EB;
+}
+
+.receipt-instructions {
+  padding: 12px 24px 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #6B7280;
+}
+
+/* Error state */
+.error-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  max-width: 400px;
+  width: 100%;
+  padding: 40px 24px;
+  text-align: center;
+}
+.error-card h2 { color: #DC2626; margin-bottom: 8px; }
+.error-card p { color: #6B7280; font-size: 0.9rem; }
+
+@media print {
+  body { background: #fff; padding: 0; }
+  .receipt { box-shadow: none; border: 1px solid #E5E7EB; }
+}
+</style>
+</head>
+<body>
+
+<div id="content"></div>
+
+<script>
+function init() {
+  const container = document.getElementById('content');
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get('d');
+
+  if (!encoded) {
+    showError(container, 'No data found', 'This link appears to be invalid or incomplete.');
+    return;
+  }
+
+  let data;
+  try {
+    const json = atob(encoded);
+    data = JSON.parse(json);
+  } catch (e) {
+    showError(container, 'Invalid link', 'Could not decode the QR data. The link may be corrupted.');
+    return;
+  }
+
+  if (!data.id || !data.payload) {
+    showError(container, 'Missing data', 'This link is missing required QR information.');
+    return;
+  }
+
+  renderReceipt(container, data);
+}
+
+function renderReceipt(container, data) {
+  const primaryField = data.primaryField || '';
+  const display = data.display || {};
+  const payload = data.payload || {};
+  const title = data.title || 'Your QR Code';
+  const subtitle = data.subtitle || '';
+
+  const primaryValue = display[primaryField] || payload[primaryField] || Object.values(display)[0] || ('ID: ' + data.id);
+
+  // Build fields HTML
+  const displayFields = data.displayFields || Object.keys(display);
+  let fieldsHtml = '';
+  displayFields.forEach(field => {
+    if (field === primaryField) return;
+    const val = display[field];
+    if (val === undefined || val === '') return;
+    fieldsHtml += `
+      <div class="receipt-field">
+        <div class="receipt-field-label">${escHtml(field)}</div>
+        <div class="receipt-field-value">${escHtml(val)}</div>
+      </div>`;
+  });
+
+  const receipt = document.createElement('div');
+  receipt.className = 'receipt';
+  receipt.innerHTML = `
+    <div class="receipt-header">
+      <h1>${escHtml(title)}</h1>
+      ${subtitle ? '<div class="subtitle">' + escHtml(subtitle) + '</div>' : ''}
+    </div>
+    <div class="receipt-qr"><div id="qrcode"></div></div>
+    <div class="receipt-primary">${escHtml(primaryValue)}</div>
+    <div class="receipt-instructions">Present this QR code at the venue to check in.</div>
+    <hr class="receipt-divider">
+    <div class="receipt-fields">${fieldsHtml}</div>
+    <div class="receipt-footer">
+      Generated on ${new Date().toLocaleDateString()} &bull; ID #${data.id}
+    </div>
+  `;
+
+  container.appendChild(receipt);
+
+  // Generate QR code
+  const qrContent = JSON.stringify({ id: data.id, payload: data.payload });
+  new QRCode(document.getElementById('qrcode'), {
+    text: qrContent,
+    width: 220,
+    height: 220,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+function showError(container, title, message) {
+  container.innerHTML = `
+    <div class="error-card">
+      <h2>${escHtml(title)}</h2>
+      <p>${escHtml(message)}</p>
+    </div>`;
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Wait for QRCode library to load
+if (typeof QRCode !== 'undefined') {
+  init();
+} else {
+  window.addEventListener('DOMContentLoaded', () => {
+    // defer script may still be loading, poll briefly
+    const check = setInterval(() => {
+      if (typeof QRCode !== 'undefined') {
+        clearInterval(check);
+        init();
+      }
+    }, 50);
+    setTimeout(() => clearInterval(check), 5000);
+  });
+}
+</script>
+</body>
+</html>
