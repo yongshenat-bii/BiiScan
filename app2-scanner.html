@@ -403,6 +403,43 @@ function waitForLibs() {
   }
 })();
 
+// ── Reset session state (clean slate for switching sessions) ──
+function resetSession() {
+  // Detach all Firebase listeners from previous session
+  if (sessionRef) {
+    sessionRef.child('rows').off();
+    sessionRef.child('presence').off();
+    if (presenceRef) presenceRef.off();
+  }
+  if (db) {
+    try { db.ref('.info/connected').off(); } catch (e) {}
+  }
+  // Stop camera
+  if (scanner) { try { scanner.stop(); } catch (e) {} }
+  // Reset state
+  bundle = null;
+  scanner = null;
+  pendingRow = null;
+  modalOpen = false;
+  scanning = false;
+  currentCameraId = null;
+  sessionCode = null;
+  sessionRef = null;
+  collectionsRef = null;
+  presenceRef = null;
+  isCreator = false;
+  deviceNames = {};
+  // Reset UI
+  document.getElementById('passcodeInput').value = '';
+  document.getElementById('passcodeError').textContent = '';
+  document.getElementById('homeStatus').innerHTML = '';
+  document.getElementById('joinCodeInput').value = '';
+  // Close any open panels
+  document.getElementById('logPanel').classList.remove('open');
+  document.getElementById('adminPanel2').classList.remove('open');
+  document.getElementById('confirmModal').classList.remove('open');
+}
+
 // ── Toast ──
 function showToast(msg, type = 'success', ms = 2500) {
   const t = document.getElementById('toast');
@@ -462,6 +499,7 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
   if (!requireName()) { e.target.value = ''; return; }
   if (!firebaseReady) { setHomeStatus('Firebase not configured', true); return; }
 
+  resetSession();
   setHomeStatus('<div class="spinner" style="margin:0 auto;"></div> Loading bundle...');
 
   try {
@@ -534,6 +572,7 @@ async function joinSession() {
   if (code.length < 4) { setHomeStatus('Enter a valid session code', true); return; }
   if (!firebaseReady) { setHomeStatus('Firebase not configured', true); return; }
 
+  resetSession();
   setHomeStatus('<div class="spinner" style="margin:0 auto;"></div> Joining session...');
 
   try {
@@ -976,13 +1015,9 @@ function listenForKick() {
   if (!sessionRef) return;
   sessionRef.child('kicked/' + deviceId).on('value', snap => {
     if (snap.exists()) {
-      // Clean up and go back to home
-      if (scanner) { try { scanner.stop(); } catch (e) {} }
       showToast('You were removed from this session', 'error', 4000);
       setTimeout(() => {
-        sessionRef = null;
-        bundle = null;
-        sessionCode = null;
+        resetSession();
         showScreen(1);
       }, 1500);
     }
