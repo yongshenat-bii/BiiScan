@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiiScan Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" defer></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #F8FAFC;
+  color: #1F2937;
+  min-height: 100vh;
+}
+
+/* ── Login Screen ── */
+.login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 24px;
+}
+.login-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+  padding: 32px 24px; max-width: 400px; width: 100%; text-align: center;
+}
+.login-card h1 { color: #0F6E56; font-size: 1.5rem; margin-bottom: 4px; }
+.login-card .sub { font-size: 0.82rem; color: #6B7280; margin-bottom: 20px; }
+.login-field { text-align: left; margin-bottom: 14px; }
+.login-field label { font-size: 0.85rem; font-weight: 600; color: #374151; display: block; margin-bottom: 4px; }
+.login-field input {
+  width: 100%; padding: 10px 12px; border: 2px solid #D1D5DB; border-radius: 8px;
+  font-size: 1rem; outline: none; transition: border-color 0.2s;
+}
+.login-field input:focus { border-color: #0F6E56; }
+.login-field input.code {
+  text-align: center; font-size: 1.4rem; font-weight: 700;
+  letter-spacing: 0.25em; font-family: monospace; text-transform: uppercase;
+}
+.login-status { margin-top: 10px; font-size: 0.85rem; min-height: 1.5em; }
+
+/* ── Dashboard ── */
+.dashboard { display: none; }
+.dashboard.active { display: block; }
+
+.dash-header {
+  background: #0F6E56; color: #fff; padding: 16px 24px;
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+.dash-header h1 { font-size: 1.2rem; }
+.dash-header-info { display: flex; align-items: center; gap: 16px; font-size: 0.85rem; }
+.dash-header-info .badge {
+  background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 20px; font-weight: 600;
+}
+.sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.sync-dot.live { background: #34D399; animation: pulse 1.5s infinite; }
+.sync-dot.offline { background: #F87171; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── Stats Cards ── */
+.stats-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; padding: 16px 24px;
+}
+.stat-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+  padding: 16px; text-align: center;
+}
+.stat-card .stat-value { font-size: 2rem; font-weight: 700; }
+.stat-card .stat-label { font-size: 0.8rem; color: #6B7280; margin-top: 2px; }
+.stat-card.green .stat-value { color: #16A34A; }
+.stat-card.amber .stat-value { color: #F59E0B; }
+.stat-card.blue .stat-value { color: #2563EB; }
+.stat-card.purple .stat-value { color: #7C3AED; }
+
+/* ── Device Stats ── */
+.device-stats {
+  padding: 0 24px 12px;
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.device-chip {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 20px;
+  padding: 6px 14px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px;
+}
+.device-chip .chip-count { font-weight: 700; color: #0F6E56; }
+
+/* ── Toolbar ── */
+.toolbar {
+  padding: 12px 24px; display: flex; gap: 10px; flex-wrap: wrap;
+  align-items: center; background: #fff; border-bottom: 1px solid #E5E7EB;
+  position: sticky; top: 0; z-index: 10;
+}
+.search-box {
+  flex: 1; min-width: 200px; padding: 10px 14px; border: 1px solid #D1D5DB;
+  border-radius: 8px; font-size: 0.9rem; outline: none;
+}
+.search-box:focus { border-color: #0F6E56; box-shadow: 0 0 0 2px rgba(15,110,86,0.15); }
+.filter-btns { display: flex; gap: 4px; }
+.filter-btn {
+  padding: 6px 14px; border: 1px solid #D1D5DB; border-radius: 6px;
+  background: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-btn:hover { background: #F3F4F6; }
+.filter-btn.active { background: #0F6E56; color: #fff; border-color: #0F6E56; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 16px; border: none; border-radius: 8px;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-teal { background: #0F6E56; color: #fff; }
+.btn-green { background: #16A34A; color: #fff; }
+.btn-red { background: #DC2626; color: #fff; }
+.btn-secondary { background: #E5E7EB; color: #374151; }
+.btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+
+/* ── Table ── */
+.table-wrap { padding: 0 24px 24px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #F3F4F6; }
+th {
+  font-weight: 600; color: #6B7280; background: #F9FAFB;
+  position: sticky; top: 54px; z-index: 5;
+}
+tr:hover td { background: #F0FDFA; }
+tr.collected td { color: #6B7280; }
+.status-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.status-badge.checked { background: #DCFCE7; color: #16A34A; }
+.status-badge.pending { background: #FEF3C7; color: #92400E; }
+.action-btns { display: flex; gap: 4px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 8px; font-size: 0.85rem;
+  z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: #16A34A; color: #fff; }
+.toast.error { background: #DC2626; color: #fff; }
+
+/* ── No results ── */
+.no-results { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<!-- ══════ Login ══════ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>BiiScan Dashboard</h1>
+    <p class="sub">Admin monitoring &amp; manual check-in</p>
+    <div class="login-field">
+      <label>Session code</label>
+      <input type="text" id="loginCode" class="code" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <div class="login-field">
+      <label>Passcode</label>
+      <input type="text" id="loginPasscode" class="code" maxlength="5" placeholder="-----" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <button class="btn btn-teal" style="width:100%;padding:12px;font-size:1rem;" onclick="loginDashboard()">Open Dashboard</button>
+    <div class="login-status" id="loginStatus"></div>
+  </div>
+</div>
+
+<!-- ══════ Dashboard ══════ -->
+<div class="dashboard" id="dashboard">
+  <div class="dash-header">
+    <h1>BiiScan Dashboard</h1>
+    <div class="dash-header-info">
+      <span><span class="sync-dot live" id="syncDot"></span><span id="syncLabel">Connecting...</span></span>
+      <span class="badge" id="sessionBadge">------</span>
+      <span class="badge" id="deviceBadge">0 devices</span>
+      <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card blue"><div class="stat-value" id="statTotal">0</div><div class="stat-label">Total</div></div>
+    <div class="stat-card green"><div class="stat-value" id="statChecked">0</div><div class="stat-label">Checked in</div></div>
+    <div class="stat-card amber"><div class="stat-value" id="statPending">0</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card purple"><div class="stat-value" id="statPercent">0%</div><div class="stat-label">Progress</div></div>
+  </div>
+
+  <!-- Device Stats -->
+  <div class="device-stats" id="deviceStats"></div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="text" class="search-box" id="searchBox" placeholder="Search by name, email, mobile..." oninput="renderTable()">
+    <div class="filter-btns">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" data-filter="checked" onclick="setFilter('checked')">Checked in</button>
+      <button class="filter-btn" data-filter="pending" onclick="setFilter('pending')">Pending</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="no-results" id="noResults" style="display:none;">No matching rows found</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Same Firebase config as app2-scanner ──
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA5yo06itP08pWyvODS4ObccM1fNI1eLFY",
+  authDomain: "biiscan.firebaseapp.com",
+  databaseURL: "https://biiscan-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "biiscan",
+  storageBucket: "biiscan.firebasestorage.app",
+  messagingSenderId: "309620299649",
+  appId: "1:309620299649:web:83e0f03db4eb4169e53a80"
+};
+
+// ── State ──
+let db = null;
+let sessionRef = null;
+let sessionCode = '';
+let meta = null;
+let rows = []; // { id, payload, display, collected, collectedAt, collectedBy, collectedByName }
+let deviceNames = {};
+let currentFilter = 'all';
+let originalHeaders = [];
+
+// ── Init Firebase ──
+function waitForFirebase() {
+  return new Promise(resolve => {
+    const check = setInterval(() => {
+      if (typeof firebase !== 'undefined' && firebase.database) { clearInterval(check); resolve(); }
+    }, 50);
+    setTimeout(() => { clearInterval(check); resolve(); }, 8000);
+  });
+}
+
+(async function init() {
+  await waitForFirebase();
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+  } catch (e) {}
+
+  // Allow enter key on login inputs
+  document.getElementById('loginCode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginPasscode').focus(); });
+  document.getElementById('loginPasscode').addEventListener('keydown', e => { if (e.key === 'Enter') loginDashboard(); });
+})();
+
+// ── Toast ──
+function showToast(msg, type = 'success', ms = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + type;
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ── Login ──
+async function loginDashboard() {
+  const code = document.getElementById('loginCode').value.trim().toUpperCase();
+  const pass = document.getElementById('loginPasscode').value.trim().toUpperCase();
+  const status = document.getElementById('loginStatus');
+
+  if (!code || code.length < 4) { status.innerHTML = '<span style="color:#DC2626;">Enter a valid session code</span>'; return; }
+  if (!pass) { status.innerHTML = '<span style="color:#DC2626;">Enter the passcode</span>'; return; }
+  if (!db) { status.innerHTML = '<span style="color:#DC2626;">Firebase not ready</span>'; return; }
+
+  status.innerHTML = '<span style="color:#0F6E56;">Connecting...</span>';
+
+  try {
+    sessionCode = code;
+    sessionRef = db.ref('sessions/' + sessionCode);
+
+    const metaSnap = await sessionRef.child('meta').once('value');
+    if (!metaSnap.exists()) {
+      status.innerHTML = '<span style="color:#DC2626;">Session not found</span>';
+      return;
+    }
+    meta = metaSnap.val();
+
+    if (pass !== meta.passcode) {
+      status.innerHTML = '<span style="color:#DC2626;">Incorrect passcode</span>';
+      return;
+    }
+
+    originalHeaders = meta.originalHeaders || meta.headers || [];
+
+    // Load rows
+    await loadRows();
+
+    // Show dashboard
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashboard').classList.add('active');
+    document.getElementById('sessionBadge').textContent = sessionCode;
+
+    // Start real-time listeners
+    startSync();
+
+  } catch (err) {
+    status.innerHTML = '<span style="color:#DC2626;">Error: ' + err.message + '</span>';
+  }
+}
+
+// ── Load rows from Firebase ──
+async function loadRows() {
+  const snap = await sessionRef.child('rows').once('value');
+  const obj = snap.val() || {};
+  rows = Object.entries(obj).map(([id, r]) => ({
+    id: parseInt(id),
+    payload: r.payload || {},
+    display: r.display || {},
+    collected: r.collected || false,
+    collectedAt: r.collectedAt || null,
+    collectedBy: r.collectedBy || null,
+    collectedByName: r.collectedByName || null
+  })).sort((a, b) => a.id - b.id);
+
+  renderStats();
+  renderTable();
+}
+
+// ── Real-time sync ──
+function startSync() {
+  // Row changes
+  sessionRef.child('rows').on('child_changed', snap => {
+    const id = parseInt(snap.key);
+    const data = snap.val();
+    const row = rows.find(r => r.id === id);
+    if (!row) return;
+    row.collected = data.collected || false;
+    row.collectedAt = data.collectedAt || null;
+    row.collectedBy = data.collectedBy || null;
+    row.collectedByName = data.collectedByName || null;
+    renderStats();
+    renderTable();
+  });
+
+  // Presence
+  sessionRef.child('presence').on('value', snap => {
+    const data = snap.val() || {};
+    const entries = Object.entries(data);
+    deviceNames = {};
+    entries.forEach(([id, v]) => { deviceNames[id] = v.name || id.substring(0, 8); });
+    document.getElementById('deviceBadge').textContent = entries.length + ' device' + (entries.length !== 1 ? 's' : '');
+    renderDeviceStats();
+  });
+
+  // Connection status
+  db.ref('.info/connected').on('value', snap => {
+    const dot = document.getElementById('syncDot');
+    const label = document.getElementById('syncLabel');
+    if (snap.val() === true) {
+      dot.className = 'sync-dot live'; label.textContent = 'Live';
+    } else {
+      dot.className = 'sync-dot offline'; label.textContent = 'Offline';
+    }
+  });
+}
+
+// ── Stats ──
+function renderStats() {
+  const total = rows.length;
+  const checked = rows.filter(r => r.collected).length;
+  const pending = total - checked;
+  const pct = total > 0 ? Math.round(checked / total * 100) : 0;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statChecked').textContent = checked;
+  document.getElementById('statPending').textContent = pending;
+  document.getElementById('statPercent').textContent = pct + '%';
+
+  renderDeviceStats();
+}
+
+function renderDeviceStats() {
+  // Count scans per person
+  const stats = {};
+  rows.forEach(r => {
+    if (!r.collected) return;
+    const name = r.collectedByName || deviceNames[r.collectedBy] || r.collectedBy || 'Unknown';
+    stats[name] = (stats[name] || 0) + 1;
+  });
+
+  const container = document.getElementById('deviceStats');
+  if (Object.keys(stats).length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = Object.entries(stats)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `<div class="device-chip"><span>${escHtml(name)}</span><span class="chip-count">${count}</span></div>`)
+    .join('');
+}
+
+// ── Filter ──
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+  renderTable();
+}
+
+// ── Table ──
+function renderTable() {
+  const query = document.getElementById('searchBox').value.trim().toLowerCase();
+
+  // Determine visible columns from display fields
+  const displayFields = meta.displayFields || [];
+  const headRow = document.getElementById('tableHead');
+  const body = document.getElementById('tableBody');
+
+  // Build header
+  headRow.innerHTML = '<tr><th style="width:50px;">#</th>'
+    + displayFields.map(f => '<th>' + escHtml(restoreHeader(f)) + '</th>').join('')
+    + '<th style="width:100px;">Status</th><th style="width:140px;">Scanned by</th><th style="width:140px;">Time</th><th style="width:160px;">Actions</th></tr>';
+
+  // Filter rows
+  let filtered = rows;
+
+  if (currentFilter === 'checked') filtered = filtered.filter(r => r.collected);
+  else if (currentFilter === 'pending') filtered = filtered.filter(r => !r.collected);
+
+  if (query) {
+    filtered = filtered.filter(r => {
+      // Search across all payload and display values
+      const allVals = Object.values(r.payload || {}).concat(Object.values(r.display || {})).join(' ').toLowerCase();
+      return allVals.includes(query);
+    });
+  }
+
+  if (filtered.length === 0) {
+    body.innerHTML = '';
+    document.getElementById('noResults').style.display = 'block';
+    return;
+  }
+  document.getElementById('noResults').style.display = 'none';
+
+  body.innerHTML = filtered.map(row => {
+    const cls = row.collected ? 'collected' : '';
+    const statusBadge = row.collected
+      ? '<span class="status-badge checked">Checked in</span>'
+      : '<span class="status-badge pending">Pending</span>';
+    const scannedBy = row.collected
+      ? escHtml(row.collectedByName || deviceNames[row.collectedBy] || row.collectedBy || '')
+      : '';
+    const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
+
+    const actionBtn = row.collected
+      ? `<button class="btn btn-red btn-sm" onclick="uncheckRow(${row.id})">Uncheck</button>`
+      : `<button class="btn btn-green btn-sm" onclick="checkInRow(${row.id})">Check in</button>`;
+
+    const cells = displayFields.map(f => {
+      const val = row.display[f] ?? row.payload[f] ?? '';
+      return '<td>' + escHtml(val) + '</td>';
+    }).join('');
+
+    return `<tr class="${cls}"><td>${row.id}</td>${cells}<td>${statusBadge}</td><td>${scannedBy}</td><td style="font-size:0.78rem;">${time}</td><td class="action-btns">${actionBtn}</td></tr>`;
+  }).join('');
+}
+
+// ── Restore original header name ──
+function restoreHeader(sanitized) {
+  // Try to find original header that matches when sanitized
+  const orig = originalHeaders.find(h => h.replace(/[.#$/\[\]]/g, '_') === sanitized);
+  return orig || sanitized;
+}
+
+// ── Manual check-in ──
+async function checkInRow(id) {
+  const rowRef = sessionRef.child('rows/' + id);
+  try {
+    await rowRef.transaction(current => {
+      if (!current) return current;
+      if (current.collected) return; // already done
+      current.collected = true;
+      current.collectedAt = new Date().toISOString();
+      current.collectedBy = 'dashboard';
+      current.collectedByName = 'Dashboard';
+      return current;
+    });
+    showToast('Checked in #' + id);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Manual uncheck ──
+async function uncheckRow(id) {
+  if (!confirm('Uncheck row #' + id + '? This will mark it as not collected.')) return;
+  const rowRef = sessionRef.child('rows/' + id);
+  try {
+    await rowRef.update({
+      collected: false,
+      collectedAt: null,
+      collectedBy: null,
+      collectedByName: null
+    });
+    showToast('Unchecked #' + id);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Export CSV ──
+function exportCSV() {
+  const headers = originalHeaders.length > 0 ? originalHeaders : (meta.headers || []);
+  let csv = ['id', ...headers, 'collected', 'collectedAt', 'collectedBy'].join(',') + '\n';
+  rows.forEach(row => {
+    const vals = [row.id];
+    headers.forEach(h => {
+      const safeH = h.replace(/[.#$/\[\]]/g, '_');
+      const v = row.payload[safeH] ?? row.payload[h] ?? row.display[safeH] ?? row.display[h] ?? '';
+      vals.push('"' + String(v).replace(/"/g, '""') + '"');
+    });
+    vals.push(row.collected ? 'true' : 'false');
+    vals.push(row.collectedAt || '');
+    const name = row.collectedByName || deviceNames[row.collectedBy] || row.collectedBy || '';
+    vals.push('"' + name.replace(/"/g, '""') + '"');
+    csv += vals.join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'biiscan-audit-' + sessionCode + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exported');
+}
+
+// ── Helpers ──
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+</body>
+</html>
