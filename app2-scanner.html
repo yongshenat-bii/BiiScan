@@ -145,22 +145,33 @@ body {
 <div class="screen home-screen active" id="screen1">
   <div class="home-card">
     <h1>QR Scanner</h1>
-    <p class="sub">Multi-device real-time check-in</p>
+    <p class="sub">Enter your name and session code to start scanning</p>
 
-    <!-- Create new session -->
-    <label class="btn btn-teal" id="loadBtn" style="flex:none;display:inline-flex;cursor:pointer;width:100%;">
-      Load bundle.json &amp; create session
-      <input type="file" id="bundleInput" accept=".json" style="display:none;">
-    </label>
+    <!-- Your name -->
+    <div style="text-align:left;margin-bottom:16px;">
+      <label style="font-size:0.85rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Your name</label>
+      <input type="text" id="scannerNameInput" placeholder="e.g. Sarah" autocomplete="name" style="width:100%;padding:12px;border:2px solid #D1D5DB;border-radius:8px;font-size:1rem;outline:none;" onfocus="this.style.borderColor='#0F6E56'" onblur="this.style.borderColor='#D1D5DB'">
+    </div>
 
-    <div class="home-divider">OR</div>
-
-    <!-- Join existing session -->
-    <p style="font-size:0.85rem;color:#6B7280;margin-bottom:8px;">Join an existing session</p>
-    <input type="text" class="session-input" id="joinCodeInput" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false">
-    <button class="btn btn-teal" style="width:100%;margin-top:10px;flex:none;" onclick="joinSession()">Join Session</button>
+    <!-- Join session (primary flow) -->
+    <div style="text-align:left;margin-bottom:16px;">
+      <label style="font-size:0.85rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Session code</label>
+      <input type="text" class="session-input" id="joinCodeInput" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <button class="btn btn-teal" style="width:100%;flex:none;padding:14px;font-size:1rem;" onclick="joinSession()">Join Session</button>
 
     <div class="home-status" id="homeStatus"></div>
+
+    <!-- Admin: create session (collapsed) -->
+    <div style="margin-top:20px;text-align:center;">
+      <a href="#" id="adminToggle" onclick="event.preventDefault();document.getElementById('adminPanel').style.display=document.getElementById('adminPanel').style.display==='none'?'block':'none'" style="font-size:0.8rem;color:#9CA3AF;text-decoration:none;">Admin: Create new session</a>
+      <div id="adminPanel" style="display:none;margin-top:12px;">
+        <label class="btn btn-secondary" id="loadBtn" style="flex:none;display:inline-flex;cursor:pointer;width:100%;">
+          Load bundle.json &amp; create session
+          <input type="file" id="bundleInput" accept=".json" style="display:none;">
+        </label>
+      </div>
+    </div>
 
     <div class="home-tip" id="firebaseTip" style="display:none;">
       <strong>Setup required:</strong> Open this file and paste your Firebase config into the <code>FIREBASE_CONFIG</code> object at the top of the script. <a href="https://console.firebase.google.com" target="_blank" style="color:#0F6E56;">Create a free project here</a>.
@@ -263,6 +274,8 @@ let collectionsRef = null;
 let presenceRef = null;
 let isCreator = false;
 let firebaseReady = false;
+let scannerName = '';
+let deviceNames = {}; // deviceId -> name lookup
 
 // ── Firebase key sanitisation ──
 // Firebase keys can't contain . # $ / [ ]
@@ -371,9 +384,20 @@ function generateSessionCode() {
 // ══════════════════════════════════════
 //  CREATE SESSION (load bundle)
 // ══════════════════════════════════════
+function requireName() {
+  scannerName = document.getElementById('scannerNameInput').value.trim();
+  if (!scannerName) {
+    setHomeStatus('Please enter your name first', true);
+    document.getElementById('scannerNameInput').focus();
+    return false;
+  }
+  return true;
+}
+
 document.getElementById('bundleInput').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
+  if (!requireName()) { e.target.value = ''; return; }
   if (!firebaseReady) { setHomeStatus('Firebase not configured', true); return; }
 
   setHomeStatus('<div class="spinner" style="margin:0 auto;"></div> Loading bundle...');
@@ -439,6 +463,7 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
 //  JOIN SESSION
 // ══════════════════════════════════════
 async function joinSession() {
+  if (!requireName()) return;
   const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
   if (code.length < 4) { setHomeStatus('Enter a valid session code', true); return; }
   if (!firebaseReady) { setHomeStatus('Firebase not configured', true); return; }
@@ -512,13 +537,15 @@ function startRealtimeSync() {
     row.collected = data.collected || false;
     row.collectedAt = data.collectedAt || null;
     row.collectedBy = data.collectedBy || null;
+    row.collectedByName = data.collectedByName || deviceNames[data.collectedBy] || null;
 
     updateCounter();
 
     // If someone else collected it, show a toast
     if (!wasCollected && row.collected && data.collectedBy !== deviceId) {
       const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + id);
-      showToast('Synced: ' + label, 'success');
+      const who = row.collectedByName || 'another device';
+      showToast(who + ' collected: ' + label, 'success');
     }
   });
 
@@ -536,10 +563,14 @@ function startRealtimeSync() {
     }
   });
 
-  // Device count
+  // Device count + name lookup
   sessionRef.child('presence').on('value', snap => {
     const data = snap.val() || {};
-    const count = Object.keys(data).length;
+    const entries = Object.entries(data);
+    const count = entries.length;
+    // Build deviceId -> name map
+    deviceNames = {};
+    entries.forEach(([id, v]) => { deviceNames[id] = v.name || id.substring(0, 8); });
     document.getElementById('deviceCount').textContent = count + ' device' + (count !== 1 ? 's' : '');
   });
 }
@@ -547,7 +578,7 @@ function startRealtimeSync() {
 function registerPresence() {
   if (!sessionRef) return;
   presenceRef = sessionRef.child('presence/' + deviceId);
-  presenceRef.set({ joinedAt: firebase.database.ServerValue.TIMESTAMP, ua: navigator.userAgent.substring(0, 60) });
+  presenceRef.set({ joinedAt: firebase.database.ServerValue.TIMESTAMP, name: scannerName });
   presenceRef.onDisconnect().remove();
 }
 
@@ -685,6 +716,7 @@ async function confirmCollection() {
       current.collected = true;
       current.collectedAt = new Date().toISOString();
       current.collectedBy = deviceId;
+      current.collectedByName = scannerName;
       return current;
     });
 
@@ -693,6 +725,7 @@ async function confirmCollection() {
       pendingRow.collected = true;
       pendingRow.collectedAt = new Date().toISOString();
       pendingRow.collectedBy = deviceId;
+      pendingRow.collectedByName = scannerName;
       updateCounter();
       closeModal();
       showToast('Collected: ' + label, 'success');
@@ -738,7 +771,7 @@ function openLog() {
     collected.forEach(row => {
       const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
       const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
-      const dev = row.collectedBy === deviceId ? 'This device' : (row.collectedBy || '').substring(0, 8);
+      const dev = row.collectedByName || deviceNames[row.collectedBy] || (row.collectedBy === deviceId ? scannerName : (row.collectedBy || '').substring(0, 8));
       html += `<tr><td>${row.id}</td><td>${escHtml(label)}</td><td>${time}</td><td>${dev}</td></tr>`;
     });
   }
@@ -759,7 +792,8 @@ function exportLog() {
     allHeaders.forEach(h => { const v = row.payload[h] ?? row.display[h] ?? ''; vals.push('"' + String(v).replace(/"/g, '""') + '"'); });
     vals.push(row.collected ? 'true' : 'false');
     vals.push(row.collectedAt || '');
-    vals.push(row.collectedBy || '');
+    const name = row.collectedByName || deviceNames[row.collectedBy] || row.collectedBy || '';
+    vals.push('"' + name.replace(/"/g, '""') + '"');
     csv += vals.join(',') + '\n';
   });
   downloadFile('audit-log.csv', 'text/csv', csv);
