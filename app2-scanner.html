@@ -671,7 +671,7 @@ function handleQRResult(text) {
   if (modalOpen) return;
   let data;
   try { data = JSON.parse(text); } catch (e) { showToast('Unrecognised QR code', 'error'); return; }
-  if (!data.id || !data.payload) { showToast('Unrecognised QR code', 'error'); return; }
+  if (!data.id) { showToast('Unrecognised QR code', 'error'); return; }
   const row = bundle.rows.find(r => r.id === data.id);
   if (!row) { showToast('Unrecognised QR code', 'error'); return; }
   if (row.collected) {

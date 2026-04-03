@@ -603,7 +603,7 @@ function renderQRPage() {
     const qrDiv = document.createElement('div');
     cell.appendChild(qrDiv);
 
-    const qrContent = JSON.stringify({ id: row.id, payload: row.payload });
+    const qrContent = JSON.stringify({ id: row.id });
     new QRCode(qrDiv, {
       text: qrContent,
       width: 160,
@@ -687,7 +687,7 @@ function exportPDF() {
       tmp.style.left = '-9999px';
       document.body.appendChild(tmp);
       new QRCode(tmp, {
-        text: JSON.stringify({ id: row.id, payload: row.payload }),
+        text: JSON.stringify({ id: row.id }),
         width: 200, height: 200,
         correctLevel: QRCode.CorrectLevel.M
       });
@@ -744,7 +744,7 @@ function exportPNG() {
     tmp.style.left = '-9999px';
     document.body.appendChild(tmp);
     new QRCode(tmp, {
-      text: JSON.stringify({ id: row.id, payload: row.payload }),
+      text: JSON.stringify({ id: row.id }),
       width: qrSize, height: qrSize,
       correctLevel: QRCode.CorrectLevel.M
     });
@@ -834,7 +834,7 @@ async function exportReceiptsPDF() {
     showReceiptProgress(i + 1, bundleRows.length);
     const row = bundleRows[i];
     const label = getRowLabel(row);
-    const qrText = JSON.stringify({ id: row.id, payload: row.payload });
+    const qrText = JSON.stringify({ id: row.id });
     const imgData = await generateQRImage(qrText, 300);
 
     if (i > 0) doc.addPage();
@@ -934,7 +934,7 @@ async function exportReceiptsZIP() {
     const row = bundleRows[i];
     const label = getRowLabel(row);
     const originalRow = csvRows[i];
-    const qrText = JSON.stringify({ id: row.id, payload: row.payload });
+    const qrText = JSON.stringify({ id: row.id });
 
     // Generate QR as an Image object
     const qrDataUrl = await generateQRImage(qrText, qrImgSize);
