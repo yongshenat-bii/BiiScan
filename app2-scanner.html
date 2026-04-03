@@ -735,9 +735,7 @@ function exportLog() {
     csv += vals.join(',') + '\n';
   });
   downloadFile('audit-log.csv', 'text/csv', csv);
-  const updatedBundle = JSON.stringify(bundle, null, 2);
-  downloadFile('bundle-updated.json', 'application/json', updatedBundle);
-  showToast('Audit log + bundle exported', 'success');
+  showToast('Audit log exported', 'success');
 }
 
 // ── Helpers ──
