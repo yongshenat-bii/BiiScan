@@ -131,6 +131,27 @@ body {
 .log-list th, .log-list td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; text-align: left; }
 .log-list th { font-weight: 600; color: #6B7280; position: sticky; top: 0; background: #fff; }
 
+/* ── Admin Panel ── */
+.admin-stat-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: #F9FAFB; border-radius: 8px;
+  margin-bottom: 6px; font-size: 0.85rem;
+}
+.admin-stat-row .stat-name { font-weight: 600; color: #374151; }
+.admin-stat-row .stat-count { font-weight: 700; color: #0F6E56; font-size: 1.1rem; }
+.admin-device-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: #F9FAFB; border-radius: 8px;
+  margin-bottom: 6px; font-size: 0.85rem;
+}
+.admin-device-row .dev-name { font-weight: 600; color: #374151; }
+.admin-device-row .dev-info { font-size: 0.78rem; color: #6B7280; }
+.kick-btn {
+  background: #FEE2E2; color: #DC2626; border: none; border-radius: 6px;
+  padding: 4px 10px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.kick-btn:hover { background: #FECACA; }
+
 /* ── Toast ── */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 0.85rem; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width: 90vw; text-align: center; }
 .toast.show { opacity: 1; }
@@ -166,6 +187,17 @@ body {
     <div style="margin-top:20px;text-align:center;">
       <a href="#" id="adminToggle" onclick="event.preventDefault();document.getElementById('adminPanel').style.display=document.getElementById('adminPanel').style.display==='none'?'block':'none'" style="font-size:0.8rem;color:#9CA3AF;text-decoration:none;">Admin: Create new session</a>
       <div id="adminPanel" style="display:none;margin-top:12px;">
+        <div style="text-align:left;margin-bottom:10px;">
+          <label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Max devices allowed</label>
+          <select id="maxDevicesSelect" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="6" selected>6</option>
+            <option value="8">8</option>
+            <option value="10">10</option>
+          </select>
+        </div>
         <label class="btn btn-secondary" id="loadBtn" style="flex:none;display:inline-flex;cursor:pointer;width:100%;">
           Load bundle.json &amp; create session
           <input type="file" id="bundleInput" accept=".json" style="display:none;">
@@ -214,9 +246,34 @@ body {
   <div class="manual-input-row" id="manualRow">
     <input type="text" id="manualInput" placeholder="Paste QR content here and press Enter">
   </div>
-  <div class="scanner-actions">
+  <div class="scanner-actions" id="scannerActions">
     <button class="btn btn-secondary" onclick="openLog()">View Log</button>
-    <button class="btn btn-teal" onclick="exportLog()">Export Log</button>
+    <button class="btn btn-teal" id="exportBtn" onclick="exportLog()" style="display:none;">Export Log</button>
+    <button class="btn btn-gray" id="adminPanelBtn" onclick="openAdminPanel()" style="display:none;">Admin</button>
+  </div>
+</div>
+
+<!-- Admin Panel -->
+<div class="log-panel" id="adminPanel2">
+  <div class="log-header">
+    <h3>Admin Dashboard</h3>
+    <button class="close-btn" onclick="closeAdminPanel()">&times;</button>
+  </div>
+  <div style="overflow-y:auto;flex:1;padding:0 16px 16px;">
+    <!-- Live Stats -->
+    <div style="margin-bottom:16px;">
+      <h4 style="font-size:0.9rem;color:#374151;margin-bottom:8px;">Scans per device</h4>
+      <div id="adminStats"></div>
+    </div>
+    <!-- Connected Devices -->
+    <div style="margin-bottom:16px;">
+      <h4 style="font-size:0.9rem;color:#374151;margin-bottom:8px;">Connected devices</h4>
+      <div id="adminDevices"></div>
+    </div>
+    <!-- Export -->
+    <div style="margin-bottom:16px;">
+      <button class="btn btn-teal" style="width:100%;" onclick="exportLog();closeAdminPanel();">Export Audit Log (CSV)</button>
+    </div>
   </div>
 </div>
 
@@ -363,7 +420,12 @@ function showScreen(num) {
   if (num === 3) {
     updateCounter();
     document.getElementById('sessionCodeDisplay').textContent = sessionCode || '------';
+    // Show admin controls only for session creator
+    document.getElementById('exportBtn').style.display = isCreator ? '' : 'none';
+    document.getElementById('adminPanelBtn').style.display = isCreator ? '' : 'none';
     initScanner();
+    // Listen for being kicked (non-admin)
+    if (!isCreator) listenForKick();
   }
 }
 
@@ -424,7 +486,9 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
       collectionsRef = sessionRef.child('collections');
     }
 
-    // Store metadata (bundle minus rows to save space, rows keyed by id)
+    const maxDevices = parseInt(document.getElementById('maxDevicesSelect').value) || 6;
+
+    // Store metadata
     await sessionRef.child('meta').set({
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       passcode: bundle.passcode,
@@ -432,7 +496,9 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
       displayFields: (bundle.displayFields || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
       headers: (bundle.headers || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
       originalHeaders: bundle.headers || [],
-      totalRows: bundle.rows.length
+      totalRows: bundle.rows.length,
+      adminDeviceId: deviceId,
+      maxDevices: maxDevices
     });
 
     // Store rows keyed by id
@@ -482,6 +548,15 @@ async function joinSession() {
     }
 
     const meta = metaSnap.val();
+
+    // Check device limit
+    const presenceSnap = await sessionRef.child('presence').once('value');
+    const currentDevices = presenceSnap.val() ? Object.keys(presenceSnap.val()).length : 0;
+    const maxDevices = meta.maxDevices || 6;
+    if (currentDevices >= maxDevices) {
+      setHomeStatus(`Session full (${currentDevices}/${maxDevices} devices). Ask admin to remove a device.`, true);
+      return;
+    }
 
     // Load all rows from Firebase
     const rowsSnap = await sessionRef.child('rows').once('value');
@@ -539,7 +614,7 @@ function startRealtimeSync() {
     row.collectedBy = data.collectedBy || null;
     row.collectedByName = data.collectedByName || deviceNames[data.collectedBy] || null;
 
-    updateCounter();
+    onPresenceOrRowChange();
 
     // If someone else collected it, show a toast
     if (!wasCollected && row.collected && data.collectedBy !== deviceId) {
@@ -574,6 +649,7 @@ function startRealtimeSync() {
     deviceNames = {};
     entries.forEach(([id, v]) => { deviceNames[id] = v.name || id.substring(0, 8); });
     document.getElementById('deviceCount').textContent = count + ' device' + (count !== 1 ? 's' : '');
+    onPresenceOrRowChange();
   });
 }
 
@@ -766,18 +842,30 @@ function openLog() {
     return new Date(a.collectedAt) - new Date(b.collectedAt);
   });
   document.getElementById('logTitle').textContent = `${collected.length} of ${bundle.rows.length} collected`;
-  let html = '<table><thead><tr><th>#</th><th>Primary</th><th>Collected at</th><th>Device</th></tr></thead><tbody>';
-  if (collected.length === 0) {
-    html += '<tr><td colspan="4" style="text-align:center;color:#6B7280;padding:20px;">No items collected yet</td></tr>';
+  let html;
+  if (isCreator) {
+    // Admin sees full detail
+    html = '<table><thead><tr><th>#</th><th>Primary</th><th>Collected at</th><th>By</th></tr></thead><tbody>';
+    if (collected.length === 0) {
+      html += '<tr><td colspan="4" style="text-align:center;color:#6B7280;padding:20px;">No items collected yet</td></tr>';
+    } else {
+      collected.forEach(row => {
+        const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+        const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
+        const dev = row.collectedByName || deviceNames[row.collectedBy] || (row.collectedBy === deviceId ? scannerName : (row.collectedBy || '').substring(0, 8));
+        html += `<tr><td>${row.id}</td><td>${escHtml(label)}</td><td>${time}</td><td>${dev}</td></tr>`;
+      });
+    }
+    html += '</tbody></table>';
   } else {
-    collected.forEach(row => {
-      const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
-      const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
-      const dev = row.collectedByName || deviceNames[row.collectedBy] || (row.collectedBy === deviceId ? scannerName : (row.collectedBy || '').substring(0, 8));
-      html += `<tr><td>${row.id}</td><td>${escHtml(label)}</td><td>${time}</td><td>${dev}</td></tr>`;
-    });
+    // Scanner sees only their own scans (no personal data)
+    const myScans = collected.filter(r => r.collectedBy === deviceId);
+    html = `<div style="text-align:center;padding:16px;color:#374151;">
+      <div style="font-size:2rem;font-weight:700;color:#0F6E56;">${myScans.length}</div>
+      <div style="font-size:0.85rem;color:#6B7280;">scans by you</div>
+      <div style="margin-top:12px;font-size:0.85rem;color:#6B7280;">${collected.length} of ${bundle.rows.length} total collected</div>
+    </div>`;
   }
-  html += '</tbody></table>';
   document.getElementById('logList').innerHTML = html;
   document.getElementById('logPanel').classList.add('open');
 }
@@ -800,6 +888,112 @@ function exportLog() {
   });
   downloadFile('audit-log.csv', 'text/csv', csv);
   showToast('Audit log exported', 'success');
+}
+
+// ══════════════════════════════════════
+//  ADMIN PANEL
+// ══════════════════════════════════════
+function openAdminPanel() {
+  if (!isCreator) return;
+  renderAdminStats();
+  renderAdminDevices();
+  document.getElementById('adminPanel2').classList.add('open');
+}
+
+function closeAdminPanel() {
+  document.getElementById('adminPanel2').classList.remove('open');
+}
+
+function renderAdminStats() {
+  // Count scans per device name
+  const stats = {};
+  bundle.rows.forEach(row => {
+    if (!row.collected) return;
+    const name = row.collectedByName || deviceNames[row.collectedBy] || row.collectedBy || 'Unknown';
+    stats[name] = (stats[name] || 0) + 1;
+  });
+
+  const container = document.getElementById('adminStats');
+  const totalCollected = bundle.rows.filter(r => r.collected).length;
+
+  if (Object.keys(stats).length === 0) {
+    container.innerHTML = '<div style="color:#6B7280;font-size:0.85rem;padding:8px;">No scans yet</div>';
+    return;
+  }
+
+  // Sort by count descending
+  const sorted = Object.entries(stats).sort((a, b) => b[1] - a[1]);
+  container.innerHTML = sorted.map(([name, count]) => {
+    const pct = Math.round(count / totalCollected * 100);
+    return `<div class="admin-stat-row">
+      <div>
+        <div class="stat-name">${escHtml(name)}</div>
+        <div style="font-size:0.75rem;color:#6B7280;">${pct}% of scans</div>
+      </div>
+      <div class="stat-count">${count}</div>
+    </div>`;
+  }).join('') + `<div style="text-align:right;font-size:0.8rem;color:#6B7280;margin-top:4px;">Total: ${totalCollected} / ${bundle.rows.length}</div>`;
+}
+
+function renderAdminDevices() {
+  const container = document.getElementById('adminDevices');
+  const entries = Object.entries(deviceNames);
+
+  if (entries.length === 0) {
+    container.innerHTML = '<div style="color:#6B7280;font-size:0.85rem;padding:8px;">No devices connected</div>';
+    return;
+  }
+
+  container.innerHTML = entries.map(([devId, name]) => {
+    const isMe = devId === deviceId;
+    const isAdmin = isMe && isCreator;
+    return `<div class="admin-device-row">
+      <div>
+        <div class="dev-name">${escHtml(name)}${isAdmin ? ' <span style="color:#0F6E56;font-size:0.75rem;">(Admin)</span>' : ''}${isMe && !isAdmin ? ' <span style="color:#6B7280;font-size:0.75rem;">(You)</span>' : ''}</div>
+      </div>
+      ${!isMe ? '<button class="kick-btn" onclick="kickDevice(\'' + devId + '\',\'' + escHtml(name) + '\')">Remove</button>' : '<span style="font-size:0.75rem;color:#6B7280;">—</span>'}
+    </div>`;
+  }).join('');
+}
+
+async function kickDevice(devId, name) {
+  if (!isCreator || !sessionRef) return;
+  if (!confirm('Remove ' + name + ' from this session?')) return;
+  try {
+    await sessionRef.child('presence/' + devId).remove();
+    await sessionRef.child('kicked/' + devId).set({ kickedAt: firebase.database.ServerValue.TIMESTAMP, by: scannerName });
+    showToast(name + ' removed', 'success');
+    renderAdminDevices();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Listen for being kicked (non-admin) ──
+function listenForKick() {
+  if (!sessionRef) return;
+  sessionRef.child('kicked/' + deviceId).on('value', snap => {
+    if (snap.exists()) {
+      // Clean up and go back to home
+      if (scanner) { try { scanner.stop(); } catch (e) {} }
+      showToast('You were removed from this session', 'error', 4000);
+      setTimeout(() => {
+        sessionRef = null;
+        bundle = null;
+        sessionCode = null;
+        showScreen(1);
+      }, 1500);
+    }
+  });
+}
+
+// ── Auto-refresh admin panel if open ──
+function onPresenceOrRowChange() {
+  updateCounter();
+  if (isCreator && document.getElementById('adminPanel2').classList.contains('open')) {
+    renderAdminStats();
+    renderAdminDevices();
+  }
 }
 
 // ── Helpers ──
