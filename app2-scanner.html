@@ -615,7 +615,8 @@ async function joinSession() {
         display: unsanitizeKeys(r.display, origHeaders),
         collected: r.collected || false,
         collectedAt: r.collectedAt || null,
-        collectedBy: r.collectedBy || null
+        collectedBy: r.collectedBy || null,
+        collectedByName: r.collectedByName || null
       })).sort((a, b) => a.id - b.id)
     };
 
