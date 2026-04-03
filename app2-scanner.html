@@ -549,7 +549,7 @@ function startRealtimeSync() {
     }
   });
 
-  // Sync indicator
+  // Sync indicator + re-register presence on reconnect
   const connRef = db.ref('.info/connected');
   connRef.on('value', snap => {
     const dot = document.getElementById('syncDot');
@@ -557,6 +557,8 @@ function startRealtimeSync() {
     if (snap.val() === true) {
       dot.className = 'sync-dot live';
       label.textContent = 'Live';
+      // Re-register presence every time we reconnect (phone wake, network restore)
+      registerPresence();
     } else {
       dot.className = 'sync-dot offline';
       label.textContent = 'Offline';
