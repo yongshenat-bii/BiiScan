@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BiiScan Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" defer></script>
 <style>
@@ -173,6 +174,39 @@ tr.collected td { color: #6B7280; }
 
 /* ── No results ── */
 .no-results { text-align: center; padding: 40px 20px; color: #6B7280; font-size: 0.9rem; }
+
+/* ── Row Detail Modal ── */
+.row-modal-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 200; align-items: center; justify-content: center; padding: 16px;
+}
+.row-modal-backdrop.open { display: flex; }
+.row-modal {
+  background: #fff; border-radius: 14px; max-width: 440px; width: 100%;
+  overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+}
+.row-modal-header {
+  padding: 16px; display: flex; align-items: center; justify-content: space-between;
+  background: #F9FAFB; border-bottom: 1px solid #E5E7EB;
+}
+.row-modal-header h3 { font-size: 1rem; color: #374151; }
+.row-modal-close { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #6B7280; }
+.row-modal-qr { display: flex; justify-content: center; padding: 20px; background: #fff; }
+.row-modal-qr #rowQrCode canvas, .row-modal-qr #rowQrCode img { border-radius: 8px; }
+.row-modal-status {
+  text-align: center; padding: 0 16px 12px; font-size: 0.85rem;
+}
+.row-modal-fields { padding: 0 16px 16px; }
+.rm-field {
+  display: flex; padding: 8px 0; border-bottom: 1px solid #F3F4F6; font-size: 0.88rem;
+}
+.rm-field:last-child { border-bottom: none; }
+.rm-field-label { color: #6B7280; width: 140px; flex-shrink: 0; font-weight: 500; }
+.rm-field-value { color: #1F2937; flex: 1; word-break: break-word; font-weight: 600; }
+.row-modal-actions {
+  display: flex; border-top: 1px solid #E5E7EB;
+}
+.row-modal-actions .btn { border-radius: 0; flex: 1; padding: 14px; font-size: 0.95rem; }
 </style>
 </head>
 <body>
@@ -241,6 +275,20 @@ tr.collected td { color: #6B7280; }
       <tbody id="tableBody"></tbody>
     </table>
     <div class="no-results" id="noResults" style="display:none;">No matching rows found</div>
+  </div>
+</div>
+
+<!-- ══════ Row Detail Modal ══════ -->
+<div class="row-modal-backdrop" id="rowModal" onclick="if(event.target===this)closeRowDetail()">
+  <div class="row-modal">
+    <div class="row-modal-header">
+      <h3 id="rowModalTitle">Row Details</h3>
+      <button class="row-modal-close" onclick="closeRowDetail()">&times;</button>
+    </div>
+    <div class="row-modal-qr"><div id="rowQrCode"></div></div>
+    <div class="row-modal-status" id="rowModalStatus"></div>
+    <div class="row-modal-fields" id="rowModalFields"></div>
+    <div class="row-modal-actions" id="rowModalActions"></div>
   </div>
 </div>
 
@@ -571,7 +619,7 @@ function renderTable() {
       return '<td>' + escHtml(val) + '</td>';
     }).join('');
 
-    return `<tr class="${cls}"><td>${row.id}</td>${cells}<td>${statusBadge}</td><td>${scannedBy}</td><td style="font-size:0.78rem;">${time}</td><td class="action-btns">${actionBtn}</td></tr>`;
+    return `<tr class="${cls}" style="cursor:pointer;" onclick="openRowDetail(${row.id})"><td>${row.id}</td>${cells}<td>${statusBadge}</td><td>${scannedBy}</td><td style="font-size:0.78rem;">${time}</td><td class="action-btns">${actionBtn}</td></tr>`;
   }).join('');
 }
 
@@ -643,6 +691,72 @@ function exportCSV() {
   a.click();
   URL.revokeObjectURL(url);
   showToast('CSV exported');
+}
+
+// ── Row Detail Modal ──
+let currentModalRowId = null;
+
+function openRowDetail(id) {
+  const row = rows.find(r => r.id === id);
+  if (!row) return;
+  currentModalRowId = id;
+
+  // Title
+  document.getElementById('rowModalTitle').textContent = 'Row #' + id;
+
+  // QR code
+  const qrContainer = document.getElementById('rowQrCode');
+  qrContainer.innerHTML = '';
+  new QRCode(qrContainer, {
+    text: JSON.stringify({ id: row.id }),
+    width: 180,
+    height: 180,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  // Status
+  const statusEl = document.getElementById('rowModalStatus');
+  if (row.collected) {
+    const by = row.collectedByName || deviceNames[row.collectedBy] || row.collectedBy || 'Unknown';
+    const time = row.collectedAt ? new Date(row.collectedAt).toLocaleString() : '';
+    statusEl.innerHTML = '<span class="status-badge checked">Checked in</span> by ' + escHtml(by) + (time ? ' &bull; ' + time : '');
+  } else {
+    statusEl.innerHTML = '<span class="status-badge pending">Pending</span>';
+  }
+
+  // Fields – show all display fields
+  const displayFields = meta.displayFields || [];
+  const fieldsEl = document.getElementById('rowModalFields');
+  let fieldsHtml = '';
+  displayFields.forEach(f => {
+    const val = row.display[f] ?? row.payload[f] ?? '';
+    if (val === '' || val === undefined) return;
+    fieldsHtml += `<div class="rm-field"><div class="rm-field-label">${escHtml(restoreHeader(f))}</div><div class="rm-field-value">${escHtml(val)}</div></div>`;
+  });
+  // Also show any payload fields not in displayFields
+  Object.keys(row.payload || {}).forEach(f => {
+    if (displayFields.includes(f)) return;
+    const val = row.payload[f];
+    if (val === '' || val === undefined) return;
+    fieldsHtml += `<div class="rm-field"><div class="rm-field-label">${escHtml(restoreHeader(f))}</div><div class="rm-field-value">${escHtml(val)}</div></div>`;
+  });
+  fieldsEl.innerHTML = fieldsHtml;
+
+  // Actions
+  const actionsEl = document.getElementById('rowModalActions');
+  if (row.collected) {
+    actionsEl.innerHTML = `<button class="btn btn-red" onclick="uncheckRow(${id});closeRowDetail()">Uncheck</button>`;
+  } else {
+    actionsEl.innerHTML = `<button class="btn btn-green" onclick="checkInRow(${id});closeRowDetail()">Check in</button>`;
+  }
+
+  // Show modal
+  document.getElementById('rowModal').classList.add('open');
+}
+
+function closeRowDetail() {
+  document.getElementById('rowModal').classList.remove('open');
+  currentModalRowId = null;
 }
 
 // ── Helpers ──
