@@ -785,7 +785,7 @@ async function pauseScanner() {
 // ── QR logic ──
 function onScanSuccess(decodedText) { if (!modalOpen) handleQRResult(decodedText); }
 
-function handleQRResult(text) {
+async function handleQRResult(text) {
   if (modalOpen) return;
   let data;
   try { data = JSON.parse(text); } catch (e) { showToast('Unrecognised QR code', 'error'); return; }
@@ -794,9 +794,19 @@ function handleQRResult(text) {
   if (!row) { showToast('Unrecognised QR code', 'error'); return; }
   if (row.collected) {
     const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
-    const by = row.collectedByName || 'unknown';
-    const when = row.collectedAt ? new Date(row.collectedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    showToast('Already collected \u2014 ' + label + '\n' + when + ' (' + by + ')', 'warning', 4000);
+    // Fetch fresh data from Firebase for accurate collector info
+    let by = row.collectedByName;
+    let when = row.collectedAt;
+    try {
+      const snap = await sessionRef.child('rows/' + row.id).once('value');
+      const fresh = snap.val() || {};
+      by = fresh.collectedByName || by;
+      when = fresh.collectedAt || when;
+      row.collectedByName = by;
+      row.collectedAt = when;
+    } catch (e) {}
+    const timeStr = when ? new Date(when).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    showToast('Already collected \u2014 ' + label + '\n' + timeStr + ' (' + (by || 'unknown') + ')', 'warning', 4000);
     return;
   }
   pendingRow = row;
