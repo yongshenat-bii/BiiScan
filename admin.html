@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiiScan Super Admin</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" defer></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #111827; color: #F9FAFB; min-height: 100vh;
+}
+
+/* ── Login ── */
+.login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 24px;
+}
+.login-card {
+  background: #1F2937; border: 1px solid #374151; border-radius: 12px;
+  padding: 32px 24px; max-width: 360px; width: 100%; text-align: center;
+}
+.login-card h1 { color: #F59E0B; font-size: 1.4rem; margin-bottom: 4px; }
+.login-card .sub { font-size: 0.82rem; color: #9CA3AF; margin-bottom: 20px; }
+.login-input {
+  width: 100%; text-align: center; font-size: 1.6rem; font-weight: 700;
+  letter-spacing: 0.3em; padding: 12px; border: 2px solid #374151;
+  border-radius: 8px; font-family: monospace; background: #111827; color: #F9FAFB;
+  outline: none;
+}
+.login-input:focus { border-color: #F59E0B; }
+.login-input.error { border-color: #DC2626; animation: shake 0.4s; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+.login-error { color: #DC2626; font-size: 0.85rem; margin-top: 8px; min-height: 1.2em; }
+
+/* ── Main ── */
+.main { display: none; }
+.main.active { display: block; }
+
+.top-bar {
+  background: #1F2937; border-bottom: 1px solid #374151;
+  padding: 16px 24px; display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+}
+.top-bar h1 { font-size: 1.2rem; color: #F59E0B; }
+.top-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 16px; border: none; border-radius: 8px;
+  font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-amber { background: #F59E0B; color: #111827; }
+.btn-green { background: #16A34A; color: #fff; }
+.btn-red { background: #DC2626; color: #fff; }
+.btn-secondary { background: #374151; color: #D1D5DB; }
+.btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+.btn:disabled { opacity: 0.3; cursor: default; }
+
+/* ── Stats ── */
+.global-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; padding: 16px 24px;
+}
+.g-stat {
+  background: #1F2937; border: 1px solid #374151; border-radius: 10px;
+  padding: 16px; text-align: center;
+}
+.g-stat .val { font-size: 1.8rem; font-weight: 700; }
+.g-stat .lbl { font-size: 0.78rem; color: #9CA3AF; margin-top: 2px; }
+.g-stat.amber .val { color: #F59E0B; }
+.g-stat.green .val { color: #34D399; }
+.g-stat.red .val { color: #F87171; }
+.g-stat.blue .val { color: #60A5FA; }
+
+/* ── Sessions table ── */
+.sessions-wrap { padding: 0 24px 24px; overflow-x: auto; }
+.s-toolbar {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 12px 24px;
+}
+.s-search {
+  flex: 1; min-width: 180px; padding: 8px 12px; border: 1px solid #374151;
+  border-radius: 8px; background: #1F2937; color: #F9FAFB; font-size: 0.85rem; outline: none;
+}
+.s-search:focus { border-color: #F59E0B; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #1F2937; }
+th { font-weight: 600; color: #9CA3AF; background: #111827; position: sticky; top: 0; z-index: 5; }
+tr:hover td { background: #1F2937; }
+.progress-bar-wrap { background: #374151; border-radius: 4px; height: 8px; width: 80px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.progress-bar-fill { height: 100%; background: #34D399; border-radius: 4px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.status-dot.live { background: #34D399; }
+.status-dot.idle { background: #F59E0B; }
+.status-dot.dead { background: #6B7280; }
+.session-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* ── Detail Modal ── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  z-index: 200; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: #1F2937; border: 1px solid #374151; border-radius: 12px;
+  max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto;
+}
+.modal-header {
+  padding: 16px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid #374151;
+}
+.modal-header h2 { font-size: 1.1rem; color: #F59E0B; }
+.modal-close { background: none; border: none; color: #9CA3AF; font-size: 1.4rem; cursor: pointer; }
+.modal-body { padding: 16px; }
+.detail-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.detail-stat { background: #111827; border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 100px; text-align: center; }
+.detail-stat .dval { font-size: 1.4rem; font-weight: 700; color: #34D399; }
+.detail-stat .dlbl { font-size: 0.75rem; color: #9CA3AF; }
+.detail-devices { margin-bottom: 16px; }
+.detail-devices h4 { font-size: 0.85rem; color: #D1D5DB; margin-bottom: 6px; }
+.detail-device-row { display: flex; justify-content: space-between; padding: 6px 10px; background: #111827; border-radius: 6px; margin-bottom: 4px; font-size: 0.82rem; }
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px; border-top: 1px solid #374151; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 8px; font-size: 0.85rem;
+  z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: #16A34A; color: #fff; }
+.toast.error { background: #DC2626; color: #fff; }
+
+.empty-state { text-align: center; padding: 40px; color: #6B7280; }
+</style>
+</head>
+<body>
+
+<!-- ══════ Login ══════ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>BiiScan Admin</h1>
+    <p class="sub">Super admin access</p>
+    <input type="password" class="login-input" id="masterPass" maxlength="20" placeholder="****" autocomplete="off">
+    <div class="login-error" id="loginError"></div>
+    <button class="btn btn-amber" style="width:100%;margin-top:12px;padding:12px;font-size:1rem;" onclick="doLogin()">Unlock</button>
+  </div>
+</div>
+
+<!-- ══════ Main ══════ -->
+<div class="main" id="main">
+  <div class="top-bar">
+    <h1>BiiScan Super Admin</h1>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary btn-sm" onclick="refreshSessions()">Refresh</button>
+      <button class="btn btn-amber btn-sm" onclick="backupAll()">Backup All (CSV)</button>
+      <button class="btn btn-red btn-sm" onclick="deleteOldSessions()">Delete Old Sessions</button>
+    </div>
+  </div>
+
+  <div class="global-stats" id="globalStats"></div>
+
+  <div class="s-toolbar">
+    <input type="text" class="s-search" id="sessionSearch" placeholder="Search sessions..." oninput="renderSessions()">
+  </div>
+
+  <div class="sessions-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Session</th>
+          <th>Created</th>
+          <th>Rows</th>
+          <th>Progress</th>
+          <th>Devices</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="sessionsBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">No sessions found</div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="detailTitle">Session</h2>
+      <button class="modal-close" onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-actions" id="detailActions"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MASTER_PASSWORD = '8118';
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA5yo06itP08pWyvODS4ObccM1fNI1eLFY",
+  authDomain: "biiscan.firebaseapp.com",
+  databaseURL: "https://biiscan-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "biiscan",
+  storageBucket: "biiscan.firebasestorage.app",
+  messagingSenderId: "309620299649",
+  appId: "1:309620299649:web:83e0f03db4eb4169e53a80"
+};
+
+let db = null;
+let allSessions = []; // { code, meta, rows[], presence{} }
+
+// ── Init ──
+function waitForFirebase() {
+  return new Promise(resolve => {
+    const check = setInterval(() => {
+      if (typeof firebase !== 'undefined' && firebase.database) { clearInterval(check); resolve(); }
+    }, 50);
+    setTimeout(() => { clearInterval(check); resolve(); }, 8000);
+  });
+}
+
+(async function init() {
+  await waitForFirebase();
+  try { firebase.initializeApp(FIREBASE_CONFIG); db = firebase.database(); } catch (e) {}
+  document.getElementById('masterPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('masterPass').focus();
+})();
+
+// ── Toast ──
+function showToast(msg, type = 'success', ms = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + type;
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ── Login ──
+function doLogin() {
+  const pass = document.getElementById('masterPass').value.trim();
+  if (pass === MASTER_PASSWORD) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('main').classList.add('active');
+    loadSessions();
+  } else {
+    document.getElementById('masterPass').classList.add('error');
+    document.getElementById('loginError').textContent = 'Incorrect password';
+    setTimeout(() => document.getElementById('masterPass').classList.remove('error'), 500);
+  }
+}
+
+// ── Load all sessions ──
+async function loadSessions() {
+  if (!db) return;
+  db.ref('sessions').on('value', snap => {
+    const data = snap.val() || {};
+    allSessions = Object.entries(data).map(([code, s]) => {
+      const meta = s.meta || {};
+      const rowsObj = s.rows || {};
+      const presence = s.presence || {};
+      const rowEntries = Object.values(rowsObj);
+      const total = rowEntries.length;
+      const collected = rowEntries.filter(r => r.collected).length;
+      const deviceCount = Object.keys(presence).length;
+      const deviceNames = {};
+      Object.entries(presence).forEach(([id, v]) => { deviceNames[id] = v.name || id.substring(0, 8); });
+
+      // Scan stats per device
+      const scanStats = {};
+      rowEntries.forEach(r => {
+        if (!r.collected) return;
+        const name = r.collectedByName || deviceNames[r.collectedBy] || r.collectedBy || 'Unknown';
+        scanStats[name] = (scanStats[name] || 0) + 1;
+      });
+
+      return {
+        code, meta, total, collected, deviceCount, deviceNames, scanStats,
+        presence, rowsObj,
+        createdAt: meta.createdAt || 0,
+        originalHeaders: meta.originalHeaders || meta.headers || []
+      };
+    });
+
+    allSessions.sort((a, b) => b.createdAt - a.createdAt);
+    renderGlobalStats();
+    renderSessions();
+  });
+}
+
+function refreshSessions() { showToast('Refreshed (live sync is active)'); }
+
+// ── Global Stats ──
+function renderGlobalStats() {
+  const total = allSessions.length;
+  const active = allSessions.filter(s => s.deviceCount > 0).length;
+  const idle = allSessions.filter(s => s.deviceCount === 0 && s.collected > 0).length;
+  const totalRows = allSessions.reduce((sum, s) => sum + s.total, 0);
+  const totalCollected = allSessions.reduce((sum, s) => sum + s.collected, 0);
+
+  document.getElementById('globalStats').innerHTML = `
+    <div class="g-stat amber"><div class="val">${total}</div><div class="lbl">Total Sessions</div></div>
+    <div class="g-stat green"><div class="val">${active}</div><div class="lbl">Active (devices online)</div></div>
+    <div class="g-stat blue"><div class="val">${idle}</div><div class="lbl">Idle (has data)</div></div>
+    <div class="g-stat green"><div class="val">${totalCollected}/${totalRows}</div><div class="lbl">Total Scans</div></div>
+  `;
+}
+
+// ── Sessions table ──
+function renderSessions() {
+  const query = document.getElementById('sessionSearch').value.trim().toLowerCase();
+  let filtered = allSessions;
+  if (query) {
+    filtered = filtered.filter(s => s.code.toLowerCase().includes(query)
+      || new Date(s.createdAt).toLocaleDateString().includes(query));
+  }
+
+  const body = document.getElementById('sessionsBody');
+  if (filtered.length === 0) {
+    body.innerHTML = '';
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+
+  body.innerHTML = filtered.map(s => {
+    const pct = s.total > 0 ? Math.round(s.collected / s.total * 100) : 0;
+    let dotClass, statusText;
+    if (s.deviceCount > 0) { dotClass = 'live'; statusText = 'Active'; }
+    else if (s.collected > 0) { dotClass = 'idle'; statusText = 'Idle'; }
+    else { dotClass = 'dead'; statusText = 'Empty'; }
+
+    const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleString() : '—';
+
+    return `<tr>
+      <td><span class="status-dot ${dotClass}"></span>${statusText}</td>
+      <td><strong style="font-family:monospace;letter-spacing:0.1em;color:#F59E0B;">${s.code}</strong></td>
+      <td style="font-size:0.78rem;">${dateStr}</td>
+      <td>${s.total}</td>
+      <td>
+        <span style="font-size:0.78rem;">${s.collected}/${s.total} (${pct}%)</span><br>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </td>
+      <td>${s.deviceCount}</td>
+      <td class="session-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openDetail('${s.code}')">View</button>
+        <button class="btn btn-green btn-sm" onclick="backupSession('${s.code}')">Backup</button>
+        <button class="btn btn-red btn-sm" onclick="deleteSession('${s.code}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Detail Modal ──
+function openDetail(code) {
+  const s = allSessions.find(x => x.code === code);
+  if (!s) return;
+
+  document.getElementById('detailTitle').textContent = 'Session: ' + code;
+
+  const pct = s.total > 0 ? Math.round(s.collected / s.total * 100) : 0;
+  const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleString() : '—';
+
+  let html = `
+    <div style="font-size:0.82rem;color:#9CA3AF;margin-bottom:12px;">Created: ${dateStr} &bull; Passcode: <code style="color:#F59E0B;">${s.meta.passcode || '—'}</code></div>
+    <div class="detail-stats">
+      <div class="detail-stat"><div class="dval" style="color:#60A5FA;">${s.total}</div><div class="dlbl">Total</div></div>
+      <div class="detail-stat"><div class="dval">${s.collected}</div><div class="dlbl">Collected</div></div>
+      <div class="detail-stat"><div class="dval" style="color:#F59E0B;">${s.total - s.collected}</div><div class="dlbl">Pending</div></div>
+      <div class="detail-stat"><div class="dval" style="color:#A78BFA;">${pct}%</div><div class="dlbl">Progress</div></div>
+    </div>
+  `;
+
+  // Scan stats per device
+  const statEntries = Object.entries(s.scanStats).sort((a, b) => b[1] - a[1]);
+  if (statEntries.length > 0) {
+    html += '<div class="detail-devices"><h4>Scans by person</h4>';
+    statEntries.forEach(([name, count]) => {
+      const p = s.collected > 0 ? Math.round(count / s.collected * 100) : 0;
+      html += `<div class="detail-device-row"><span>${escHtml(name)}</span><span><strong>${count}</strong> <span style="color:#6B7280;">(${p}%)</span></span></div>`;
+    });
+    html += '</div>';
+  }
+
+  // Online devices
+  const devEntries = Object.entries(s.deviceNames);
+  if (devEntries.length > 0) {
+    html += '<div class="detail-devices"><h4>Online devices (' + devEntries.length + ')</h4>';
+    devEntries.forEach(([id, name]) => {
+      html += `<div class="detail-device-row"><span><span class="status-dot live"></span>${escHtml(name)}</span><span style="font-size:0.75rem;color:#6B7280;">${id.substring(0, 8)}</span></div>`;
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:0.82rem;color:#6B7280;margin-bottom:12px;">No devices online</div>';
+  }
+
+  document.getElementById('detailBody').innerHTML = html;
+  document.getElementById('detailActions').innerHTML = `
+    <button class="btn btn-green" onclick="backupSession('${code}');closeDetail();">Backup CSV</button>
+    <button class="btn btn-amber" onclick="endSession('${code}')">End Session (kick all)</button>
+    <button class="btn btn-red" onclick="deleteSession('${code}');closeDetail();">Delete Session</button>
+    <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+  `;
+
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailModal').classList.remove('open');
+}
+
+// ── Backup single session as CSV ──
+function backupSession(code) {
+  const s = allSessions.find(x => x.code === code);
+  if (!s) return;
+
+  const headers = s.originalHeaders;
+  const rowEntries = Object.entries(s.rowsObj);
+
+  let csv = ['id', ...headers, 'collected', 'collectedAt', 'collectedBy'].join(',') + '\n';
+  rowEntries.sort((a, b) => parseInt(a[0]) - parseInt(b[0])).forEach(([id, r]) => {
+    const vals = [id];
+    headers.forEach(h => {
+      const safeH = h.replace(/[.#$/\[\]]/g, '_');
+      const v = (r.payload && (r.payload[safeH] ?? r.payload[h])) ?? (r.display && (r.display[safeH] ?? r.display[h])) ?? '';
+      vals.push('"' + String(v).replace(/"/g, '""') + '"');
+    });
+    vals.push(r.collected ? 'true' : 'false');
+    vals.push(r.collectedAt || '');
+    const name = r.collectedByName || s.deviceNames[r.collectedBy] || r.collectedBy || '';
+    vals.push('"' + String(name).replace(/"/g, '""') + '"');
+    csv += vals.join(',') + '\n';
+  });
+
+  downloadFile('biiscan-backup-' + code + '.csv', 'text/csv', csv);
+  showToast('Backup exported: ' + code);
+}
+
+// ── Backup ALL sessions ──
+function backupAll() {
+  if (allSessions.length === 0) { showToast('No sessions to backup', 'error'); return; }
+  allSessions.forEach(s => backupSession(s.code));
+  showToast('All ' + allSessions.length + ' sessions backed up');
+}
+
+// ── End session (kick all devices) ──
+async function endSession(code) {
+  if (!confirm('End session ' + code + '? This will kick all connected devices.')) return;
+  try {
+    await db.ref('sessions/' + code + '/presence').remove();
+    showToast('All devices kicked from ' + code);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Delete session ──
+async function deleteSession(code) {
+  if (!confirm('Permanently delete session ' + code + '? All data will be lost. Make sure you have a backup.')) return;
+  if (!confirm('Are you really sure? This cannot be undone.')) return;
+  try {
+    await db.ref('sessions/' + code).remove();
+    showToast('Session ' + code + ' deleted');
+    closeDetail();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+
+// ── Delete old sessions (no devices, created > 7 days ago) ──
+async function deleteOldSessions() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const old = allSessions.filter(s => s.deviceCount === 0 && s.createdAt < cutoff);
+  if (old.length === 0) { showToast('No sessions older than 7 days to delete'); return; }
+  if (!confirm('Delete ' + old.length + ' session(s) older than 7 days with no active devices?')) return;
+
+  let deleted = 0;
+  for (const s of old) {
+    try {
+      await db.ref('sessions/' + s.code).remove();
+      deleted++;
+    } catch (e) {}
+  }
+  showToast(deleted + ' old session(s) deleted');
+}
+
+// ── Helpers ──
+function downloadFile(name, type, content) {
+  const b = new Blob([content], { type });
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a');
+  a.href = u; a.download = name; a.click();
+  URL.revokeObjectURL(u);
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+</body>
+</html>
