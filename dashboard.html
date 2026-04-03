@@ -134,6 +134,33 @@ tr.collected td { color: #6B7280; }
 .status-badge.pending { background: #FEF3C7; color: #92400E; }
 .action-btns { display: flex; gap: 4px; }
 
+/* ── Sessions List ── */
+.sessions-panel {
+  margin-top: 20px; text-align: left; max-width: 400px; width: 100%;
+}
+.sessions-panel h3 { font-size: 0.9rem; color: #374151; margin-bottom: 8px; }
+.session-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; background: #F9FAFB; border: 1px solid #E5E7EB;
+  border-radius: 8px; margin-bottom: 6px; cursor: pointer;
+  transition: background 0.15s;
+}
+.session-item:hover { background: #F0FDFA; }
+.session-item .si-code { font-weight: 700; font-family: monospace; letter-spacing: 0.1em; color: #0F6E56; }
+.session-item .si-meta { font-size: 0.78rem; color: #6B7280; }
+.session-item .si-right { text-align: right; }
+.session-item .si-status { font-size: 0.75rem; font-weight: 600; }
+.session-item .si-status.active { color: #16A34A; }
+.session-item .si-status.idle { color: #F59E0B; }
+.session-item .si-status.empty { color: #9CA3AF; }
+.session-item .si-progress {
+  display: inline-block; background: #E5E7EB; border-radius: 4px;
+  height: 6px; width: 60px; margin-top: 4px; overflow: hidden;
+}
+.session-item .si-progress-bar { height: 100%; background: #16A34A; border-radius: 4px; transition: width 0.3s; }
+.sessions-loading { text-align: center; padding: 16px; color: #6B7280; font-size: 0.85rem; }
+.sessions-empty { text-align: center; padding: 16px; color: #9CA3AF; font-size: 0.85rem; }
+
 /* ── Toast ── */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -165,6 +192,12 @@ tr.collected td { color: #6B7280; }
     </div>
     <button class="btn btn-teal" style="width:100%;padding:12px;font-size:1rem;" onclick="loginDashboard()">Open Dashboard</button>
     <div class="login-status" id="loginStatus"></div>
+
+    <!-- Sessions overview -->
+    <div class="sessions-panel" id="sessionsPanel">
+      <h3>All Sessions</h3>
+      <div id="sessionsList" class="sessions-loading">Loading sessions...</div>
+    </div>
   </div>
 </div>
 
@@ -255,7 +288,80 @@ function waitForFirebase() {
   // Allow enter key on login inputs
   document.getElementById('loginCode').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginPasscode').focus(); });
   document.getElementById('loginPasscode').addEventListener('keydown', e => { if (e.key === 'Enter') loginDashboard(); });
+
+  // Load all sessions overview
+  if (db) loadSessionsList();
 })();
+
+// ── Sessions overview ──
+async function loadSessionsList() {
+  const container = document.getElementById('sessionsList');
+  try {
+    const sessionsRef = db.ref('sessions');
+    // Listen for real-time updates
+    sessionsRef.on('value', snap => {
+      const data = snap.val();
+      if (!data) {
+        container.innerHTML = '<div class="sessions-empty">No sessions found</div>';
+        return;
+      }
+
+      const sessions = Object.entries(data).map(([code, s]) => {
+        const meta = s.meta || {};
+        const rowsObj = s.rows || {};
+        const presence = s.presence || {};
+        const rowEntries = Object.values(rowsObj);
+        const total = rowEntries.length;
+        const collected = rowEntries.filter(r => r.collected).length;
+        const deviceCount = Object.keys(presence).length;
+        const createdAt = meta.createdAt || 0;
+
+        return { code, total, collected, deviceCount, createdAt };
+      });
+
+      // Sort by created date, newest first
+      sessions.sort((a, b) => b.createdAt - a.createdAt);
+
+      container.innerHTML = sessions.map(s => {
+        const pct = s.total > 0 ? Math.round(s.collected / s.total * 100) : 0;
+        let statusClass, statusText;
+        if (s.deviceCount > 0) {
+          statusClass = 'active';
+          statusText = s.deviceCount + ' device' + (s.deviceCount !== 1 ? 's' : '') + ' online';
+        } else if (s.collected > 0) {
+          statusClass = 'idle';
+          statusText = 'No devices (has data)';
+        } else {
+          statusClass = 'empty';
+          statusText = 'Inactive';
+        }
+
+        const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '';
+
+        return `<div class="session-item" onclick="quickFillSession('${s.code}')">
+          <div>
+            <div class="si-code">${s.code}</div>
+            <div class="si-meta">${dateStr} &bull; ${s.total} rows</div>
+          </div>
+          <div class="si-right">
+            <div class="si-status ${statusClass}">${statusText}</div>
+            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:2px;">
+              <span style="font-size:0.75rem;color:#6B7280;">${s.collected}/${s.total}</span>
+              <div class="si-progress"><div class="si-progress-bar" style="width:${pct}%"></div></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    });
+  } catch (e) {
+    container.innerHTML = '<div class="sessions-empty">Could not load sessions</div>';
+  }
+}
+
+function quickFillSession(code) {
+  document.getElementById('loginCode').value = code;
+  document.getElementById('loginPasscode').focus();
+}
 
 // ── Toast ──
 function showToast(msg, type = 'success', ms = 2500) {
