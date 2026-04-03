@@ -134,7 +134,9 @@ function init() {
 
   let data;
   try {
-    const json = atob(encoded);
+    const binary = atob(encoded);
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
     data = JSON.parse(json);
   } catch (e) {
     showError(container, 'Invalid link', 'Could not decode the QR data. The link may be corrupted.');

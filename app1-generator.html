@@ -281,6 +281,24 @@ h1 { color: #7C3AED; font-size: 1.6rem; margin-bottom: 24px; text-align: center;
         <span id="receiptProgressText" style="font-size:0.8rem;color:#6B7280;"></span>
       </div>
     </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #E5E7EB;">
+      <p style="font-size:0.85rem;font-weight:600;margin-bottom:4px;color:#374151;">Email Package (unique links per person)</p>
+      <p style="font-size:0.8rem;color:#6B7280;margin-bottom:10px;">
+        Host <code>qr-receipt.html</code> on GitHub Pages, then enter your base URL below. Exports a CSV with each row's email + unique link.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+        <div style="flex:1;min-width:220px;">
+          <label style="font-size:0.8rem;font-weight:600;color:#6B7280;display:block;margin-bottom:4px;">Base URL</label>
+          <input type="text" id="baseUrlInput" placeholder="https://yourname.github.io/repo-name" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;">
+        </div>
+        <div style="min-width:120px;">
+          <label style="font-size:0.8rem;font-weight:600;color:#6B7280;display:block;margin-bottom:4px;">Email column</label>
+          <select id="emailColSelect" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;"></select>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="exportEmailPackage()">Export email-links.csv</button>
+      <button class="btn btn-secondary" style="margin-top:10px;" onclick="previewReceiptLink()">Preview first link</button>
+    </div>
   </div>
 </div>
 
@@ -558,6 +576,17 @@ function buildStep4() {
   buildBundleRows();
   qrPage = 0;
   renderQRPage();
+
+  // Populate email column dropdown
+  const emailSel = document.getElementById('emailColSelect');
+  emailSel.innerHTML = '<option value="">(none)</option>';
+  csvHeaders.forEach(h => {
+    const opt = document.createElement('option');
+    opt.value = h; opt.textContent = h;
+    // Auto-select columns that look like email
+    if (/email|e-mail|mail/i.test(h)) opt.selected = true;
+    emailSel.appendChild(opt);
+  });
 }
 
 function renderQRPage() {
@@ -1015,6 +1044,79 @@ async function exportReceiptsZIP() {
   a.click();
   URL.revokeObjectURL(url);
   showToast(`ZIP exported (${bundleRows.length} receipts)`);
+}
+
+// ── Email Package: unique links per person ──
+function buildReceiptLink(baseUrl, row) {
+  const data = {
+    id: row.id,
+    payload: row.payload,
+    display: row.display,
+    primaryField,
+    displayFields
+  };
+  // Use TextEncoder to handle non-ASCII characters safely
+  const jsonStr = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(jsonStr);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  const encoded = btoa(binary);
+  const base = baseUrl.replace(/\/+$/, '');
+  return base + '/qr-receipt.html?d=' + encodeURIComponent(encoded);
+}
+
+function exportEmailPackage() {
+  const baseUrl = document.getElementById('baseUrlInput').value.trim();
+  if (!baseUrl) {
+    showToast('Enter your base URL first');
+    return;
+  }
+
+  const emailCol = document.getElementById('emailColSelect').value;
+
+  // Build CSV: all original columns + qr_link (+ email column first if selected)
+  const headers = [];
+  if (emailCol) headers.push('email');
+  headers.push('id', 'primary_value', 'qr_link');
+  csvHeaders.forEach(h => {
+    if (h !== emailCol) headers.push(h);
+  });
+
+  let csv = headers.map(h => '"' + h.replace(/"/g, '""') + '"').join(',') + '\n';
+
+  bundleRows.forEach((row, i) => {
+    const originalRow = csvRows[i];
+    const link = buildReceiptLink(baseUrl, row);
+    const label = getRowLabel(row);
+
+    const vals = [];
+    if (emailCol) vals.push(csvVal(originalRow[emailCol] || ''));
+    vals.push(row.id);
+    vals.push(csvVal(label));
+    vals.push(csvVal(link));
+    csvHeaders.forEach(h => {
+      if (h !== emailCol) vals.push(csvVal(originalRow[h] || ''));
+    });
+    csv += vals.join(',') + '\n';
+  });
+
+  downloadFile('email-links.csv', 'text/csv', csv);
+  showToast(`email-links.csv exported (${bundleRows.length} rows)`);
+}
+
+function csvVal(v) {
+  return '"' + String(v).replace(/"/g, '""') + '"';
+}
+
+function previewReceiptLink() {
+  const baseUrl = document.getElementById('baseUrlInput').value.trim();
+  if (!baseUrl) {
+    showToast('Enter your base URL first');
+    return;
+  }
+  if (bundleRows.length === 0) return;
+  const link = buildReceiptLink(baseUrl, bundleRows[0]);
+  window.open(link, '_blank');
 }
 </script>
 </body>
