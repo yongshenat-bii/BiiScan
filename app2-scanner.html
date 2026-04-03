@@ -580,10 +580,12 @@ async function joinSession() {
       })).sort((a, b) => a.id - b.id)
     };
 
-    isCreator = false;
+    // Restore admin if this device originally created the session
+    isCreator = (meta.adminDeviceId === deviceId);
     registerPresence();
 
-    setHomeStatus('Joined session <strong>' + sessionCode + '</strong>. Redirecting...');
+    const roleLabel = isCreator ? ' (Admin restored)' : '';
+    setHomeStatus('Joined session <strong>' + sessionCode + '</strong>' + roleLabel + '. Redirecting...');
     setTimeout(() => showScreen(2), 600);
 
   } catch (err) {
