@@ -264,6 +264,32 @@ let presenceRef = null;
 let isCreator = false;
 let firebaseReady = false;
 
+// ── Firebase key sanitisation ──
+// Firebase keys can't contain . # $ / [ ]
+function sanitizeKeys(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeKeys);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const safeKey = k.replace(/[.#$/\[\]]/g, '_');
+    out[safeKey] = sanitizeKeys(v);
+  }
+  return out;
+}
+
+function unsanitizeKeys(obj, originalKeys) {
+  // Reverse map: safeKey -> originalKey
+  if (!originalKeys || obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj;
+  const keyMap = {};
+  originalKeys.forEach(k => { keyMap[k.replace(/[.#$/\[\]]/g, '_')] = k; });
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[keyMap[k] || k] = (typeof v === 'object' && v !== null && !Array.isArray(v)) ? unsanitizeKeys(v, originalKeys) : v;
+  }
+  return out;
+}
+
 // ── Generate device ID ──
 function getDeviceId() {
   let id = localStorage.getItem('qr_device_id');
@@ -378,9 +404,10 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     await sessionRef.child('meta').set({
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       passcode: bundle.passcode,
-      primaryField: bundle.primaryField,
-      displayFields: bundle.displayFields || [],
-      headers: bundle.headers || [],
+      primaryField: bundle.primaryField.replace(/[.#$/\[\]]/g, '_'),
+      displayFields: (bundle.displayFields || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
+      headers: (bundle.headers || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
+      originalHeaders: bundle.headers || [],
       totalRows: bundle.rows.length
     });
 
@@ -388,8 +415,8 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     const rowsData = {};
     bundle.rows.forEach(row => {
       rowsData[row.id] = {
-        payload: row.payload,
-        display: row.display,
+        payload: sanitizeKeys(row.payload),
+        display: sanitizeKeys(row.display),
         collected: false,
         collectedAt: null,
         collectedBy: null
@@ -435,17 +462,18 @@ async function joinSession() {
     const rowsSnap = await sessionRef.child('rows').once('value');
     const rowsObj = rowsSnap.val() || {};
 
-    // Reconstruct bundle
+    // Reconstruct bundle (restore original header names for display)
+    const origHeaders = meta.originalHeaders || meta.headers || [];
     bundle = {
       version: 1,
       passcode: meta.passcode,
       primaryField: meta.primaryField,
       displayFields: meta.displayFields || [],
-      headers: meta.headers || [],
+      headers: origHeaders,
       rows: Object.entries(rowsObj).map(([id, r]) => ({
         id: parseInt(id),
-        payload: r.payload,
-        display: r.display,
+        payload: unsanitizeKeys(r.payload, origHeaders),
+        display: unsanitizeKeys(r.display, origHeaders),
         collected: r.collected || false,
         collectedAt: r.collectedAt || null,
         collectedBy: r.collectedBy || null
