@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BiiScan - Operating Guide</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #F8FAFC; color: #1F2937; line-height: 1.7;
+  max-width: 780px; margin: 0 auto; padding: 24px 20px 60px;
+}
+h1 { font-size: 1.8rem; color: #0F6E56; margin-bottom: 4px; }
+.subtitle { color: #6B7280; font-size: 0.95rem; margin-bottom: 32px; }
+h2 {
+  font-size: 1.15rem; color: #0F6E56; margin: 32px 0 12px;
+  padding-bottom: 6px; border-bottom: 2px solid #D1FAE5;
+}
+h3 { font-size: 1rem; color: #374151; margin: 16px 0 8px; }
+p, li { font-size: 0.92rem; color: #374151; }
+ol, ul { padding-left: 22px; margin-bottom: 12px; }
+li { margin-bottom: 6px; }
+a { color: #0F6E56; text-decoration: none; font-weight: 600; }
+a:hover { text-decoration: underline; }
+code {
+  background: #F1F5F9; padding: 2px 7px; border-radius: 4px;
+  font-size: 0.85rem; font-family: monospace; color: #7C3AED;
+}
+.card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+  padding: 16px 20px; margin-bottom: 12px;
+}
+.card-title {
+  font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 0.75rem; font-weight: 700; color: #fff;
+}
+.badge-admin { background: #7C3AED; }
+.badge-scanner { background: #0F6E56; }
+.badge-operator { background: #2563EB; }
+.badge-super { background: #DC2626; }
+.links-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0;
+}
+.link-card {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+  padding: 14px 16px; text-align: center; transition: box-shadow 0.2s;
+}
+.link-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.link-card .icon { font-size: 1.5rem; margin-bottom: 6px; }
+.link-card .name { font-weight: 700; font-size: 0.88rem; color: #374151; }
+.link-card .desc { font-size: 0.78rem; color: #6B7280; margin-top: 2px; }
+.step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; background: #0F6E56;
+  color: #fff; font-size: 0.78rem; font-weight: 700; margin-right: 6px;
+  flex-shrink: 0;
+}
+.warn {
+  background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px;
+  padding: 12px 16px; font-size: 0.85rem; color: #92400E; margin: 12px 0;
+}
+.tip {
+  background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px;
+  padding: 12px 16px; font-size: 0.85rem; color: #065F46; margin: 12px 0;
+}
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 12px 0; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+th { background: #F9FAFB; font-weight: 600; color: #6B7280; }
+.flow-arrow { text-align: center; color: #9CA3AF; font-size: 1.2rem; margin: 8px 0; }
+@media (max-width: 500px) {
+  .links-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<h1>BiiScan Operating Guide</h1>
+<p class="subtitle">Internal testing guide for the QR check-in system</p>
+
+<!-- ══════ Quick Links ══════ -->
+<h2>Quick Links</h2>
+<div class="links-grid">
+  <a href="https://yongshenat-bii.github.io/BiiScan/app1-generator.html" class="link-card">
+    <div class="icon">📦</div>
+    <div class="name">Generator</div>
+    <div class="desc">Upload CSV, generate QR codes</div>
+  </a>
+  <a href="https://yongshenat-bii.github.io/BiiScan/app2-scanner.html" class="link-card">
+    <div class="icon">📷</div>
+    <div class="name">Scanner</div>
+    <div class="desc">Scan QR codes on phone</div>
+  </a>
+  <a href="https://yongshenat-bii.github.io/BiiScan/dashboard.html" class="link-card">
+    <div class="icon">📊</div>
+    <div class="name">Dashboard</div>
+    <div class="desc">Monitor &amp; manual check-in</div>
+  </a>
+  <a href="https://yongshenat-bii.github.io/BiiScan/admin.html" class="link-card">
+    <div class="icon">🔐</div>
+    <div class="name">Super Admin</div>
+    <div class="desc">Manage all sessions</div>
+  </a>
+</div>
+
+<!-- ══════ Roles ══════ -->
+<h2>Roles</h2>
+<table>
+  <thead><tr><th>Role</th><th>Who</th><th>Access</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge badge-admin">Admin</span></td><td>Person who creates the session</td><td>Scanner + kick devices, view all logs, export audit CSV</td></tr>
+    <tr><td><span class="badge badge-scanner">Scanner</span></td><td>Team members on-site with phones</td><td>Scan QR codes, see own scan count only</td></tr>
+    <tr><td><span class="badge badge-operator">Operator</span></td><td>On-site ops with laptop/tablet</td><td>Dashboard: search, manual check-in/uncheck, view all rows, export CSV</td></tr>
+    <tr><td><span class="badge badge-super">Super Admin</span></td><td>Software owner</td><td>Admin panel: manage all sessions, backup, delete</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════ Workflow ══════ -->
+<h2>End-to-End Workflow</h2>
+
+<h3>Phase 1: Prepare (Laptop)</h3>
+<div class="card">
+  <div class="card-title"><span class="step-num">1</span> Generate QR Bundle</div>
+  <ol>
+    <li>Open <a href="https://yongshenat-bii.github.io/BiiScan/app1-generator.html">Generator</a> on your laptop</li>
+    <li><strong>Upload CSV</strong> - drag or click to upload your participant list</li>
+    <li><strong>Configure fields</strong>:
+      <ul>
+        <li><em>Primary field</em> - main identifier shown during scan (e.g. Name)</li>
+        <li><em>Display fields</em> - extra fields shown in confirm popup (e.g. Email, Company)</li>
+      </ul>
+    </li>
+    <li><strong>Set a passcode</strong> - this protects the session (share only with your team)</li>
+    <li><strong>Review &amp; Export</strong>:
+      <ul>
+        <li>Download <code>bundle.json</code> (required for scanner)</li>
+        <li>Optional: QR Sheet PDF, individual receipt PNGs, email-links CSV</li>
+      </ul>
+    </li>
+  </ol>
+</div>
+
+<div class="flow-arrow">&#8595;</div>
+
+<h3>Phase 2: Create Session (Admin Phone)</h3>
+<div class="card">
+  <div class="card-title"><span class="step-num">2</span> Admin creates the scanning session</div>
+  <ol>
+    <li>Open <a href="https://yongshenat-bii.github.io/BiiScan/app2-scanner.html">Scanner</a> on your phone</li>
+    <li>Enter your <strong>name</strong> (for audit trail)</li>
+    <li>Tap <strong>"Create new session"</strong> at the bottom</li>
+    <li>Select <strong>max devices</strong> allowed (default 6)</li>
+    <li>Load the <code>bundle.json</code> file you exported</li>
+    <li>A <strong>6-character session code</strong> will be generated - share this with your team</li>
+  </ol>
+  <div class="tip">The person who creates the session is automatically the <strong>Admin</strong> and can kick devices, view full logs, and export audit data.</div>
+</div>
+
+<div class="flow-arrow">&#8595;</div>
+
+<h3>Phase 3: Team Joins (Scanner Phones)</h3>
+<div class="card">
+  <div class="card-title"><span class="step-num">3</span> Scanners join the session</div>
+  <ol>
+    <li>Open <a href="https://yongshenat-bii.github.io/BiiScan/app2-scanner.html">Scanner</a> on each phone</li>
+    <li>Enter your <strong>name</strong></li>
+    <li>Enter the <strong>session code</strong> shared by Admin</li>
+    <li>Tap <strong>Join Session</strong></li>
+    <li>Enter the <strong>passcode</strong> when prompted</li>
+    <li>Allow camera access when asked</li>
+  </ol>
+  <div class="warn">Each scanner only sees their own scan count (not the full participant list) for privacy.</div>
+</div>
+
+<div class="flow-arrow">&#8595;</div>
+
+<h3>Phase 4: Scan (Event Day)</h3>
+<div class="card">
+  <div class="card-title"><span class="step-num">4</span> Scan QR codes</div>
+  <ol>
+    <li>Point camera at a participant's QR code</li>
+    <li>A <strong>confirmation popup</strong> appears showing the participant's details</li>
+    <li>Tap <strong>Confirm</strong> to check them in</li>
+    <li>If already scanned, it shows: <code>Already collected - Name</code> with date, time, and who scanned it</li>
+  </ol>
+  <div class="tip">All phones sync in real-time. No two phones can double-scan the same QR.</div>
+</div>
+
+<div class="flow-arrow">&#8595;</div>
+
+<h3>Phase 5: Monitor (Operator Laptop/Tablet)</h3>
+<div class="card">
+  <div class="card-title"><span class="step-num">5</span> Dashboard for on-site operations</div>
+  <ol>
+    <li>Open <a href="https://yongshenat-bii.github.io/BiiScan/dashboard.html">Dashboard</a></li>
+    <li>Enter <strong>session code</strong> + <strong>passcode</strong></li>
+    <li>Live view of:
+      <ul>
+        <li>Total / Checked in / Pending / Progress %</li>
+        <li>Scans per person (device chips)</li>
+        <li>Connected devices count</li>
+      </ul>
+    </li>
+    <li><strong>Search</strong> by name, email, or mobile</li>
+    <li><strong>Click any row</strong> to see full details + QR code</li>
+    <li><strong>Manual check-in / uncheck</strong> for walk-ins or corrections</li>
+    <li><strong>Export CSV</strong> at any time</li>
+  </ol>
+</div>
+
+<!-- ══════ Admin Panel ══════ -->
+<h2>Super Admin Panel</h2>
+<div class="card">
+  <ol>
+    <li>Open <a href="https://yongshenat-bii.github.io/BiiScan/admin.html">Admin Panel</a></li>
+    <li>Enter master password: <code>8118</code></li>
+    <li>View all sessions with live status (active / idle / dead)</li>
+    <li>Click any session to see details, online devices, scan stats</li>
+    <li>Actions: <strong>Backup CSV</strong>, <strong>End Session</strong> (kick all), <strong>Delete Session</strong></li>
+    <li>Bulk: <strong>Backup All</strong>, <strong>Delete Old Sessions</strong> (>7 days with no devices)</li>
+  </ol>
+</div>
+
+<!-- ══════ Email QR Codes ══════ -->
+<h2>Sending QR Codes via Email</h2>
+<div class="card">
+  <ol>
+    <li>In the <strong>Generator</strong>, after exporting the bundle, scroll to <strong>Email Package</strong></li>
+    <li>Set the base URL to: <code>https://yongshenat-bii.github.io/BiiScan/qr-receipt.html</code></li>
+    <li>Select the <strong>email column</strong> from your CSV</li>
+    <li>Click <strong>Export email-links.csv</strong></li>
+    <li>The exported CSV contains each participant's email + unique QR receipt link</li>
+    <li>Use your email sender tool to mail each link to the participant</li>
+  </ol>
+  <div class="tip">Each link is self-contained - no server or database needed. The participant sees a receipt page with their QR code and details.</div>
+</div>
+
+<!-- ══════ Testing Checklist ══════ -->
+<h2>Testing Checklist</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Test</th><th>How</th><th>Expected</th></tr></thead>
+    <tbody>
+      <tr><td>CSV upload</td><td>Upload a test CSV in Generator</td><td>Fields appear, QR preview works</td></tr>
+      <tr><td>Bundle export</td><td>Download bundle.json</td><td>File downloads, valid JSON</td></tr>
+      <tr><td>Create session</td><td>Load bundle on phone Scanner</td><td>6-char code generated, camera opens</td></tr>
+      <tr><td>Join session</td><td>2nd phone joins with code + passcode</td><td>Camera opens, device count = 2</td></tr>
+      <tr><td>Scan QR</td><td>Print/display a QR, scan it</td><td>Confirm popup, then "Collected" toast</td></tr>
+      <tr><td>Duplicate scan</td><td>Scan same QR on 2nd phone</td><td>Shows "Already collected" with date, time, name</td></tr>
+      <tr><td>Dashboard sync</td><td>Open Dashboard, scan a QR</td><td>Row updates to "Checked in" in real-time</td></tr>
+      <tr><td>Manual check-in</td><td>Click "Check in" on a pending row in Dashboard</td><td>Status changes, scanner phones see updated count</td></tr>
+      <tr><td>Row detail</td><td>Click any row in Dashboard</td><td>Modal shows QR code + all fields</td></tr>
+      <tr><td>Export CSV</td><td>Click Export in Dashboard</td><td>CSV downloads with all data + scan info</td></tr>
+      <tr><td>Admin panel</td><td>Login with 8118</td><td>All sessions visible with stats</td></tr>
+      <tr><td>Phone sleep</td><td>Lock phone, unlock after 30s</td><td>Device count recovers, scanning resumes</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══════ Tips ══════ -->
+<h2>Tips &amp; Troubleshooting</h2>
+<div class="card">
+  <ul>
+    <li><strong>Camera not working?</strong> - Must use HTTPS. Make sure you're accessing via the GitHub Pages URL, not a local file.</li>
+    <li><strong>Device count shows 0?</strong> - Happens when phone sleeps. Unlock and it auto-recovers within seconds.</li>
+    <li><strong>Admin lost access?</strong> - Rejoin the session with the same device. Admin status is tied to device ID and auto-restores.</li>
+    <li><strong>Session timeout?</strong> - Sessions persist in Firebase indefinitely. No timeout during events. Data stays for 30 days (Firebase test mode).</li>
+    <li><strong>Max devices?</strong> - Up to 6 phones per session. Configurable when creating the session.</li>
+    <li><strong>CSV has special characters?</strong> - Handled automatically. Column names with <code>/</code>, <code>.</code>, <code>#</code> etc. are sanitized for Firebase.</li>
+    <li><strong>QR too complex to scan?</strong> - QR codes only contain <code>{"id":1}</code>, kept minimal for fast scanning.</li>
+  </ul>
+</div>
+
+<div style="text-align:center;padding:32px 0 16px;color:#9CA3AF;font-size:0.82rem;">
+  BiiScan v1.0 &bull; Internal Use Only
+</div>
+
+</body>
+</html>
