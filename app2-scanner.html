@@ -531,7 +531,7 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     }
 
     const maxDevices = parseInt(document.getElementById('maxDevicesSelect').value) || 6;
-    const eventName = (document.getElementById('eventNameInput').value || '').trim();
+    eventName = (document.getElementById('eventNameInput').value || '').trim();
 
     // Store metadata
     await sessionRef.child('meta').set({
@@ -561,7 +561,6 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     await sessionRef.child('rows').set(rowsData);
 
     // Register presence
-    eventName = (document.getElementById('eventNameInput').value || '').trim();
     registerPresence();
 
     setHomeStatus('Session created: <strong>' + sessionCode + '</strong>. Redirecting...');
