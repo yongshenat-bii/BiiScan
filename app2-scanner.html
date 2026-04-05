@@ -177,7 +177,8 @@ body {
     <!-- Join session (primary flow) -->
     <div style="text-align:left;margin-bottom:16px;">
       <label style="font-size:0.85rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Session code</label>
-      <input type="text" class="session-input" id="joinCodeInput" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <input type="text" class="session-input" id="joinCodeInput" maxlength="6" placeholder="ABC123" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="previewSessionName()">
+      <div id="sessionPreview" style="margin-top:8px;font-size:0.85rem;color:#00B5AC;font-weight:600;min-height:1.3em;text-align:center;"></div>
     </div>
     <button class="btn btn-teal" style="width:100%;flex:none;padding:14px;font-size:1rem;" onclick="joinSession()">Join Session</button>
 
@@ -219,6 +220,7 @@ body {
 <div class="screen passcode-screen" id="screen2">
   <div class="passcode-card">
     <h2>Enter Passcode</h2>
+    <div id="passcodeSessionInfo" style="font-size:0.9rem;color:#374151;margin-bottom:12px;text-align:center;font-weight:600;"></div>
     <p style="font-size:0.85rem;color:#6B7280;margin-bottom:16px;">Enter the 5-character passcode to unlock scanning.</p>
     <input type="text" class="passcode-input" id="passcodeInput" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <div class="passcode-error" id="passcodeError"></div>
@@ -458,7 +460,13 @@ function showToast(msg, type = 'success', ms = 2500) {
 function showScreen(num) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen' + num).classList.add('active');
-  if (num === 2) setTimeout(() => document.getElementById('passcodeInput').focus(), 100);
+  if (num === 2) {
+    const info = document.getElementById('passcodeSessionInfo');
+    info.innerHTML = eventName
+      ? escHtml(eventName) + ' <span style="font-weight:400;color:#6B7280;">(' + sessionCode + ')</span>'
+      : '<span style="color:#6B7280;">' + sessionCode + '</span>';
+    setTimeout(() => document.getElementById('passcodeInput').focus(), 100);
+  }
   if (num === 3) {
     updateCounter();
     document.getElementById('sessionCodeDisplay').textContent = sessionCode || '------';
@@ -570,6 +578,29 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     setHomeStatus('Error: ' + err.message, true);
   }
 });
+
+// ══════════════════════════════════════
+//  SESSION PREVIEW
+// ══════════════════════════════════════
+let previewTimer = null;
+function previewSessionName() {
+  const preview = document.getElementById('sessionPreview');
+  const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+  if (code.length < 4 || !firebaseReady) { preview.textContent = ''; return; }
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    try {
+      const snap = await db.ref('sessions/' + code + '/meta').once('value');
+      if (!snap.exists()) { preview.innerHTML = '<span style="color:#DC2626;">Session not found</span>'; return; }
+      const meta = snap.val();
+      const name = meta.eventName || '';
+      const total = meta.totalRows || 0;
+      preview.innerHTML = name
+        ? '<span style="color:#00B5AC;">' + escHtml(name) + '</span> <span style="color:#6B7280;font-weight:400;">(' + total + ' rows)</span>'
+        : '<span style="color:#6B7280;font-weight:400;">Session found (' + total + ' rows)</span>';
+    } catch (e) { preview.textContent = ''; }
+  }, 400);
+}
 
 // ══════════════════════════════════════
 //  JOIN SESSION
