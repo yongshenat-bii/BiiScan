@@ -188,6 +188,10 @@ body {
       <a href="#" id="adminToggle" onclick="event.preventDefault();document.getElementById('adminPanel').style.display=document.getElementById('adminPanel').style.display==='none'?'block':'none'" style="font-size:0.8rem;color:#9CA3AF;text-decoration:none;">Admin: Create new session</a>
       <div id="adminPanel" style="display:none;margin-top:12px;">
         <div style="text-align:left;margin-bottom:10px;">
+          <label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Event name</label>
+          <input type="text" id="eventNameInput" placeholder="e.g. Annual Dinner 2026" style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;outline:none;" />
+        </div>
+        <div style="text-align:left;margin-bottom:10px;">
           <label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Max devices allowed</label>
           <select id="maxDevicesSelect" style="width:100%;padding:8px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;">
             <option value="2">2</option>
@@ -233,7 +237,7 @@ body {
       <span class="sync-dot live" id="syncDot"></span>
       <span id="syncLabel">Synced</span>
     </div>
-    <div>Session: <span class="session-code" id="sessionCodeDisplay" onclick="copySessionCode()" title="Tap to copy">------</span></div>
+    <div><span id="eventNameDisplay" style="font-weight:600;margin-right:6px;"></span><span class="session-code" id="sessionCodeDisplay" onclick="copySessionCode()" title="Tap to copy">------</span></div>
     <div class="device-count" id="deviceCount"></div>
   </div>
   <div class="camera-select-row">
@@ -332,6 +336,7 @@ let presenceRef = null;
 let isCreator = false;
 let firebaseReady = false;
 let scannerName = '';
+let eventName = '';
 let deviceNames = {}; // deviceId -> name lookup
 
 // ── Firebase key sanitisation ──
@@ -457,6 +462,7 @@ function showScreen(num) {
   if (num === 3) {
     updateCounter();
     document.getElementById('sessionCodeDisplay').textContent = sessionCode || '------';
+    document.getElementById('eventNameDisplay').textContent = eventName || '';
     // Show admin controls only for session creator
     document.getElementById('exportBtn').style.display = isCreator ? '' : 'none';
     document.getElementById('adminPanelBtn').style.display = isCreator ? '' : 'none';
@@ -525,10 +531,12 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     }
 
     const maxDevices = parseInt(document.getElementById('maxDevicesSelect').value) || 6;
+    const eventName = (document.getElementById('eventNameInput').value || '').trim();
 
     // Store metadata
     await sessionRef.child('meta').set({
       createdAt: firebase.database.ServerValue.TIMESTAMP,
+      eventName: eventName || null,
       passcode: bundle.passcode,
       primaryField: bundle.primaryField.replace(/[.#$/\[\]]/g, '_'),
       displayFields: (bundle.displayFields || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
@@ -553,6 +561,7 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     await sessionRef.child('rows').set(rowsData);
 
     // Register presence
+    eventName = (document.getElementById('eventNameInput').value || '').trim();
     registerPresence();
 
     setHomeStatus('Session created: <strong>' + sessionCode + '</strong>. Redirecting...');
@@ -622,6 +631,7 @@ async function joinSession() {
 
     // Restore admin if this device originally created the session
     isCreator = (meta.adminDeviceId === deviceId);
+    eventName = meta.eventName || '';
     registerPresence();
 
     const roleLabel = isCreator ? ' (Admin restored)' : '';

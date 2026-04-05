@@ -238,7 +238,7 @@ tr.collected td { color: #6B7280; }
 <!-- ══════ Dashboard ══════ -->
 <div class="dashboard" id="dashboard">
   <div class="dash-header">
-    <h1>BiiB REPC Dashboard</h1>
+    <div><h1 style="margin:0;">BiiB REPC Dashboard</h1><span id="eventNameLabel" style="font-size:0.82rem;opacity:0.8;"></span></div>
     <div class="dash-header-info">
       <span><span class="sync-dot live" id="syncDot"></span><span id="syncLabel">Connecting...</span></span>
       <span class="badge" id="sessionBadge">------</span>
@@ -364,7 +364,7 @@ async function loadSessionsList() {
         const deviceCount = Object.keys(presence).length;
         const createdAt = meta.createdAt || 0;
 
-        return { code, total, collected, deviceCount, createdAt };
+        return { code, total, collected, deviceCount, createdAt, eventName: meta.eventName || '' };
       });
 
       // Sort by created date, newest first
@@ -388,7 +388,7 @@ async function loadSessionsList() {
 
         return `<div class="session-item" onclick="quickFillSession('${s.code}')">
           <div>
-            <div class="si-code">${s.code}</div>
+            <div class="si-code">${s.code}${s.eventName ? ' <span style="font-weight:400;font-family:inherit;letter-spacing:normal;font-size:0.82rem;color:#374151;">' + s.eventName + '</span>' : ''}</div>
             <div class="si-meta">${dateStr} &bull; ${s.total} rows</div>
           </div>
           <div class="si-right">
@@ -457,6 +457,7 @@ async function loginDashboard() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashboard').classList.add('active');
     document.getElementById('sessionBadge').textContent = sessionCode;
+    document.getElementById('eventNameLabel').textContent = meta.eventName || '';
 
     // Start real-time listeners
     startSync();

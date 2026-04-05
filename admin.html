@@ -319,6 +319,7 @@ function renderSessions() {
   let filtered = allSessions;
   if (query) {
     filtered = filtered.filter(s => s.code.toLowerCase().includes(query)
+      || (s.meta.eventName || '').toLowerCase().includes(query)
       || new Date(s.createdAt).toLocaleDateString().includes(query));
   }
 
@@ -341,7 +342,7 @@ function renderSessions() {
 
     return `<tr>
       <td><span class="status-dot ${dotClass}"></span>${statusText}</td>
-      <td><strong style="font-family:monospace;letter-spacing:0.1em;color:#F59E0B;">${s.code}</strong></td>
+      <td><strong style="font-family:monospace;letter-spacing:0.1em;color:#F59E0B;">${s.code}</strong>${s.meta.eventName ? '<br><span style="font-size:0.75rem;color:#9CA3AF;">' + escHtml(s.meta.eventName) + '</span>' : ''}</td>
       <td style="font-size:0.78rem;">${dateStr}</td>
       <td>${s.total}</td>
       <td>
@@ -363,7 +364,7 @@ function openDetail(code) {
   const s = allSessions.find(x => x.code === code);
   if (!s) return;
 
-  document.getElementById('detailTitle').textContent = 'Session: ' + code;
+  document.getElementById('detailTitle').textContent = s.meta.eventName ? s.meta.eventName + ' (' + code + ')' : 'Session: ' + code;
 
   const pct = s.total > 0 ? Math.round(s.collected / s.total * 100) : 0;
   const dateStr = s.createdAt ? new Date(s.createdAt).toLocaleString() : '—';
