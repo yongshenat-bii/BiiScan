@@ -152,6 +152,30 @@ body {
 }
 .kick-btn:hover { background: #FECACA; }
 
+/* ── Search Panel ── */
+.search-filter-btn {
+  padding: 5px 12px; border: 1px solid #D1D5DB; border-radius: 6px;
+  background: #fff; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.search-filter-btn.active { background: #00B5AC; color: #fff; border-color: #00B5AC; }
+.search-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px;
+  margin-top: 8px; background: #fff; cursor: pointer; transition: background 0.15s;
+}
+.search-item:hover { background: #F0FDFA; }
+.search-item.checked-row { opacity: 0.6; }
+.search-item .si-main { flex: 1; min-width: 0; }
+.search-item .si-name { font-weight: 600; font-size: 0.9rem; color: #1F2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-item .si-detail { font-size: 0.78rem; color: #6B7280; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-item .si-badge {
+  flex-shrink: 0; margin-left: 10px; padding: 3px 10px; border-radius: 12px;
+  font-size: 0.72rem; font-weight: 700;
+}
+.search-item .si-badge.pending { background: #FEF3C7; color: #92400E; }
+.search-item .si-badge.checked { background: #DCFCE7; color: #16A34A; }
+.search-empty { text-align: center; padding: 24px; color: #9CA3AF; font-size: 0.85rem; }
+
 /* ── Toast ── */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 0.85rem; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width: 90vw; text-align: center; white-space: pre-line; }
 .toast.show { opacity: 1; }
@@ -254,6 +278,7 @@ body {
   </div>
   <div class="scanner-actions" id="scannerActions">
     <button class="btn btn-secondary" onclick="openLog()">View Log</button>
+    <button class="btn btn-secondary" onclick="openSearchPanel()">🔍 Search</button>
     <button class="btn btn-teal" id="exportBtn" onclick="exportLog()" style="display:none;">Export Log</button>
     <button class="btn btn-gray" id="adminPanelBtn" onclick="openAdminPanel()" style="display:none;">Admin</button>
   </div>
@@ -294,6 +319,23 @@ body {
       <button class="btn btn-green" onclick="confirmCollection()">OK</button>
     </div>
   </div>
+</div>
+
+<!-- Search Panel -->
+<div class="log-panel" id="searchPanel">
+  <div class="log-header">
+    <h3>Search &amp; Check-in</h3>
+    <button class="close-btn" onclick="closeSearchPanel()">&times;</button>
+  </div>
+  <div style="padding:12px 16px 8px;">
+    <input type="text" id="searchInput" placeholder="Search by name or mobile number..." oninput="renderSearchResults()" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:0.9rem;outline:none;" onfocus="this.style.borderColor='#00B5AC'" onblur="this.style.borderColor='#D1D5DB'">
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="search-filter-btn active" data-sf="all" onclick="setSearchFilter('all')">All</button>
+      <button class="search-filter-btn" data-sf="pending" onclick="setSearchFilter('pending')">Pending</button>
+      <button class="search-filter-btn" data-sf="checked" onclick="setSearchFilter('checked')">Checked in</button>
+    </div>
+  </div>
+  <div id="searchResults" style="overflow-y:auto;flex:1;padding:0 16px 16px;"></div>
 </div>
 
 <!-- Log Panel -->
@@ -969,6 +1011,99 @@ function openLog() {
 }
 
 function closeLog() { document.getElementById('logPanel').classList.remove('open'); }
+
+// ══════════════════════════════════════
+//  SEARCH & MANUAL CHECK-IN
+// ══════════════════════════════════════
+let searchFilter = 'all';
+
+function openSearchPanel() {
+  if (!bundle) return;
+  document.getElementById('searchInput').value = '';
+  searchFilter = 'all';
+  document.querySelectorAll('.search-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.sf === 'all'));
+  renderSearchResults();
+  document.getElementById('searchPanel').classList.add('open');
+  setTimeout(() => document.getElementById('searchInput').focus(), 100);
+}
+
+function closeSearchPanel() { document.getElementById('searchPanel').classList.remove('open'); }
+
+function setSearchFilter(f) {
+  searchFilter = f;
+  document.querySelectorAll('.search-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.sf === f));
+  renderSearchResults();
+}
+
+function renderSearchResults() {
+  const query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  const container = document.getElementById('searchResults');
+  if (!bundle || !bundle.rows) { container.innerHTML = '<div class="search-empty">No data loaded</div>'; return; }
+
+  let results = bundle.rows;
+
+  // Apply filter
+  if (searchFilter === 'pending') results = results.filter(r => !r.collected);
+  else if (searchFilter === 'checked') results = results.filter(r => r.collected);
+
+  // Apply search (limited to name + mobile/phone fields for speed)
+  if (query) {
+    const primaryKey = bundle.primaryField;
+    const mobileKeys = Object.keys((results[0] || {}).display || {}).concat(Object.keys((results[0] || {}).payload || {}))
+      .filter(k => /mobile|phone|hp|contact|tel|handphone/i.test(k));
+    results = results.filter(r => {
+      const name = (r.display[primaryKey] || r.payload[primaryKey] || '').toLowerCase();
+      if (name.includes(query)) return true;
+      for (const k of mobileKeys) {
+        const v = (r.display[k] || r.payload[k] || '').toString().toLowerCase();
+        if (v.includes(query)) return true;
+      }
+      return false;
+    });
+  }
+
+  if (results.length === 0) {
+    container.innerHTML = '<div class="search-empty">No results found</div>';
+    return;
+  }
+
+  // Limit to 50 for performance
+  const shown = results.slice(0, 50);
+  container.innerHTML = shown.map(row => {
+    const name = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+    // Build detail line from other display fields
+    const otherFields = (bundle.displayFields || []).filter(f => f !== bundle.primaryField);
+    const detail = otherFields.map(f => row.display[f] || '').filter(v => v).join(' · ');
+    const badgeClass = row.collected ? 'checked' : 'pending';
+    const badgeText = row.collected ? 'Checked in' : 'Pending';
+    const rowClass = row.collected ? 'search-item checked-row' : 'search-item';
+
+    return `<div class="${rowClass}" onclick="searchSelectRow(${row.id})">
+      <div class="si-main">
+        <div class="si-name">${escHtml(name)}</div>
+        ${detail ? '<div class="si-detail">' + escHtml(detail) + '</div>' : ''}
+      </div>
+      <span class="si-badge ${badgeClass}">${badgeText}</span>
+    </div>`;
+  }).join('') + (results.length > 50 ? '<div class="search-empty">Showing first 50 of ' + results.length + ' results</div>' : '');
+}
+
+function searchSelectRow(id) {
+  const row = bundle.rows.find(r => r.id === id);
+  if (!row) return;
+  closeSearchPanel();
+  if (row.collected) {
+    // Show already collected info
+    const label = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+    const by = row.collectedByName || 'unknown';
+    const when = row.collectedAt ? new Date(row.collectedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    showToast('Already collected \u2014 ' + label + '\n' + when + ' (' + by + ')', 'warning', 4000);
+  } else {
+    // Open the confirm modal (same as QR scan)
+    pendingRow = row;
+    showConfirmModal(row);
+  }
+}
 
 // ── Export ──
 function exportLog() {
