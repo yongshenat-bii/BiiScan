@@ -674,6 +674,16 @@ async function joinSession() {
 
     const meta = metaSnap.val();
 
+    // Block rejoin if session has been ended by admin
+    if (meta.endedAt) {
+      setHomeStatus('This session has been ended by admin.', true);
+      return;
+    }
+
+    // Clear any previous kick entry for this device so rejoin is allowed
+    // (kick is not a permanent ban — only removes current connection)
+    try { await sessionRef.child('kicked/' + deviceId).remove(); } catch (e) {}
+
     // Check device limit
     const presenceSnap = await sessionRef.child('presence').once('value');
     const currentDevices = presenceSnap.val() ? Object.keys(presenceSnap.val()).length : 0;
