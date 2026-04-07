@@ -900,18 +900,28 @@ async function handleQRResult(text) {
 }
 
 // ── Confirmation ──
+function lookupField(row, field) {
+  // Try direct lookup, then sanitized key, then payload
+  if (row.display && row.display[field] !== undefined) return row.display[field];
+  if (row.payload && row.payload[field] !== undefined) return row.payload[field];
+  const safeKey = field.replace(/[.#$/\[\]]/g, '_');
+  if (row.display && row.display[safeKey] !== undefined) return row.display[safeKey];
+  if (row.payload && row.payload[safeKey] !== undefined) return row.payload[safeKey];
+  return undefined;
+}
+
 function showConfirmModal(row) {
   modalOpen = true;
   pauseScanner();
-  const primaryVal = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+  const primaryVal = lookupField(row, bundle.primaryField) || Object.values(row.display || {})[0] || ('Row ' + row.id);
   document.getElementById('modalPrimary').textContent = primaryVal;
   const fieldsDiv = document.getElementById('modalFields');
   fieldsDiv.innerHTML = '';
-  const displayOrder = bundle.displayFields || Object.keys(row.display);
+  const displayOrder = (bundle.displayFields && bundle.displayFields.length > 0) ? bundle.displayFields : Object.keys(row.display || {});
   displayOrder.forEach(field => {
     if (field === bundle.primaryField) return;
-    const val = row.display[field];
-    if (val === undefined) return;
+    const val = lookupField(row, field);
+    if (val === undefined || val === '') return;
     const el = document.createElement('div');
     el.className = 'modal-field-row';
     el.innerHTML = `<div class="modal-field-label">${escHtml(field)}</div><div class="modal-field-value">${escHtml(val || '\u2014')}</div>`;
@@ -1074,10 +1084,10 @@ function renderSearchResults() {
   // Limit to 50 for performance
   const shown = results.slice(0, 50);
   container.innerHTML = shown.map(row => {
-    const name = row.display[bundle.primaryField] || Object.values(row.display)[0] || ('Row ' + row.id);
+    const name = lookupField(row, bundle.primaryField) || Object.values(row.display || {})[0] || ('Row ' + row.id);
     // Build detail line from other display fields
     const otherFields = (bundle.displayFields || []).filter(f => f !== bundle.primaryField);
-    const detail = otherFields.map(f => row.display[f] || '').filter(v => v).join(' · ');
+    const detail = otherFields.map(f => lookupField(row, f) || '').filter(v => v).join(' · ');
     const badgeClass = row.collected ? 'checked' : 'pending';
     const badgeText = row.collected ? 'Checked in' : 'Pending';
     const rowClass = row.collected ? 'search-item checked-row' : 'search-item';
