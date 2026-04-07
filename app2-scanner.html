@@ -684,11 +684,15 @@ async function joinSession() {
 
     // Reconstruct bundle (restore original header names for display)
     const origHeaders = meta.originalHeaders || meta.headers || [];
+    // Build sanitized -> original key map so we can restore primary/display field names
+    const keyMap = {};
+    origHeaders.forEach(k => { keyMap[k.replace(/[.#$/\[\]]/g, '_')] = k; });
+    const restoreKey = k => keyMap[k] || k;
     bundle = {
       version: 1,
       passcode: meta.passcode,
-      primaryField: meta.primaryField,
-      displayFields: meta.displayFields || [],
+      primaryField: restoreKey(meta.primaryField),
+      displayFields: (meta.displayFields || []).map(restoreKey),
       headers: origHeaders,
       rows: Object.entries(rowsObj).map(([id, r]) => ({
         id: parseInt(id),
