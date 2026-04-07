@@ -312,6 +312,7 @@ let payloadFields = [];
 let displayFields = [];
 let primaryField = '';
 let passcode = '';
+let bundleCode = '';
 let bundleRows = [];
 let currentStep = 1;
 let qrPage = 0;
@@ -324,6 +325,14 @@ function generatePasscode() {
   const arr = new Uint8Array(5);
   crypto.getRandomValues(arr);
   for (let i = 0; i < 5; i++) p += CHARSET[arr[i] % CHARSET.length];
+  return p;
+}
+
+function generateBundleCode() {
+  let p = '';
+  const arr = new Uint8Array(4);
+  crypto.getRandomValues(arr);
+  for (let i = 0; i < 4; i++) p += CHARSET[arr[i] % CHARSET.length];
   return p;
 }
 
@@ -533,6 +542,7 @@ function completeStep2() {
 // ── Step 3: Passcode ──
 function buildStep3() {
   if (!passcode) passcode = generatePasscode();
+  if (!bundleCode) bundleCode = generateBundleCode();
   document.getElementById('passcodeDisplay').textContent = passcode;
 }
 
@@ -543,6 +553,7 @@ function copyPasscode() {
 function regeneratePasscode() {
   if (!confirm('This will invalidate any previously shared bundles. Continue?')) return;
   passcode = generatePasscode();
+  bundleCode = generateBundleCode();
   document.getElementById('passcodeDisplay').textContent = passcode;
   showToast('New passcode generated');
 }
@@ -603,7 +614,7 @@ function renderQRPage() {
     const qrDiv = document.createElement('div');
     cell.appendChild(qrDiv);
 
-    const qrContent = JSON.stringify({ id: row.id });
+    const qrContent = JSON.stringify({ b: bundleCode, id: row.id });
     new QRCode(qrDiv, {
       text: qrContent,
       width: 160,
@@ -652,6 +663,7 @@ function buildBundleJSON() {
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
+    bundleCode,
     passcode,
     primaryField,
     displayFields,
@@ -687,7 +699,7 @@ function exportPDF() {
       tmp.style.left = '-9999px';
       document.body.appendChild(tmp);
       new QRCode(tmp, {
-        text: JSON.stringify({ id: row.id }),
+        text: JSON.stringify({ b: bundleCode, id: row.id }),
         width: 200, height: 200,
         correctLevel: QRCode.CorrectLevel.M
       });
@@ -744,7 +756,7 @@ function exportPNG() {
     tmp.style.left = '-9999px';
     document.body.appendChild(tmp);
     new QRCode(tmp, {
-      text: JSON.stringify({ id: row.id }),
+      text: JSON.stringify({ b: bundleCode, id: row.id }),
       width: qrSize, height: qrSize,
       correctLevel: QRCode.CorrectLevel.M
     });
@@ -834,7 +846,7 @@ async function exportReceiptsPDF() {
     showReceiptProgress(i + 1, bundleRows.length);
     const row = bundleRows[i];
     const label = getRowLabel(row);
-    const qrText = JSON.stringify({ id: row.id });
+    const qrText = JSON.stringify({ b: bundleCode, id: row.id });
     const imgData = await generateQRImage(qrText, 300);
 
     if (i > 0) doc.addPage();
@@ -934,7 +946,7 @@ async function exportReceiptsZIP() {
     const row = bundleRows[i];
     const label = getRowLabel(row);
     const originalRow = csvRows[i];
-    const qrText = JSON.stringify({ id: row.id });
+    const qrText = JSON.stringify({ b: bundleCode, id: row.id });
 
     // Generate QR as an Image object
     const qrDataUrl = await generateQRImage(qrText, qrImgSize);
@@ -1050,6 +1062,7 @@ async function exportReceiptsZIP() {
 function buildReceiptLink(baseUrl, row) {
   const data = {
     id: row.id,
+    bundleCode,
     payload: row.payload,
     display: row.display,
     primaryField,

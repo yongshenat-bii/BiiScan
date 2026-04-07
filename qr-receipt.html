@@ -194,7 +194,7 @@ function renderReceipt(container, data) {
   container.appendChild(receipt);
 
   // Generate QR code
-  const qrContent = JSON.stringify({ id: data.id });
+  const qrContent = JSON.stringify({ b: data.bundleCode, id: data.id });
   new QRCode(document.getElementById('qrcode'), {
     text: qrContent,
     width: 220,

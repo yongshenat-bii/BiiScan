@@ -328,7 +328,7 @@ body {
     <button class="close-btn" onclick="closeSearchPanel()">&times;</button>
   </div>
   <div style="padding:12px 16px 8px;">
-    <input type="text" id="searchInput" placeholder="Search by name or mobile number..." oninput="renderSearchResults()" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:0.9rem;outline:none;" onfocus="this.style.borderColor='#00B5AC'" onblur="this.style.borderColor='#D1D5DB'">
+    <input type="text" id="searchInput" placeholder="Search by name or mobile..." oninput="renderSearchResults()" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:0.9rem;outline:none;" onfocus="this.style.borderColor='#00B5AC'" onblur="this.style.borderColor='#D1D5DB'">
     <div style="display:flex;gap:6px;margin-top:8px;">
       <button class="search-filter-btn active" data-sf="all" onclick="setSearchFilter('all')">All</button>
       <button class="search-filter-btn" data-sf="pending" onclick="setSearchFilter('pending')">Pending</button>
@@ -381,6 +381,7 @@ let isCreator = false;
 let firebaseReady = false;
 let scannerName = '';
 let eventName = '';
+let kicked = false;
 let deviceNames = {}; // deviceId -> name lookup
 
 // ── Firebase key sanitisation ──
@@ -458,6 +459,8 @@ function resetSession() {
   if (sessionRef) {
     sessionRef.child('rows').off();
     sessionRef.child('presence').off();
+    sessionRef.child('meta').off();
+    if (deviceId) sessionRef.child('kicked/' + deviceId).off();
     if (presenceRef) presenceRef.off();
   }
   if (db) {
@@ -477,6 +480,7 @@ function resetSession() {
   collectionsRef = null;
   presenceRef = null;
   isCreator = false;
+  kicked = false;
   deviceNames = {};
   // Reset UI
   document.getElementById('passcodeInput').value = '';
@@ -517,8 +521,8 @@ function showScreen(num) {
     document.getElementById('exportBtn').style.display = isCreator ? '' : 'none';
     document.getElementById('adminPanelBtn').style.display = isCreator ? '' : 'none';
     initScanner();
-    // Listen for being kicked (non-admin)
-    if (!isCreator) listenForKick();
+    // Listen for being kicked or session ended (everyone, including admin for super-admin kicks)
+    listenForKick();
   }
 }
 
@@ -587,6 +591,7 @@ document.getElementById('bundleInput').addEventListener('change', async e => {
     await sessionRef.child('meta').set({
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       eventName: eventName || null,
+      bundleCode: bundle.bundleCode || null,
       passcode: bundle.passcode,
       primaryField: bundle.primaryField.replace(/[.#$/\[\]]/g, '_'),
       displayFields: (bundle.displayFields || []).map(f => f.replace(/[.#$/\[\]]/g, '_')),
@@ -690,6 +695,7 @@ async function joinSession() {
     const restoreKey = k => keyMap[k] || k;
     bundle = {
       version: 1,
+      bundleCode: meta.bundleCode || null,
       passcode: meta.passcode,
       primaryField: restoreKey(meta.primaryField),
       displayFields: (meta.displayFields || []).map(restoreKey),
@@ -872,10 +878,20 @@ async function pauseScanner() {
 function onScanSuccess(decodedText) { if (!modalOpen) handleQRResult(decodedText); }
 
 async function handleQRResult(text) {
+  if (kicked) return;
   if (modalOpen) return;
   let data;
   try { data = JSON.parse(text); } catch (e) { showToast('Unrecognised QR code', 'error'); return; }
   if (!data.id) { showToast('Unrecognised QR code', 'error'); return; }
+  // Verify QR belongs to this session's bundle
+  if (bundle.bundleCode && data.b && data.b !== bundle.bundleCode) {
+    showToast('QR from a different event \u2014 wrong session', 'error', 4000);
+    return;
+  }
+  if (bundle.bundleCode && !data.b) {
+    showToast('Old QR without event code \u2014 please use updated QR', 'error', 4000);
+    return;
+  }
   const row = bundle.rows.find(r => r.id === data.id);
   if (!row) { showToast('Unrecognised QR code', 'error'); return; }
   if (row.collected) {
@@ -931,6 +947,7 @@ function showConfirmModal(row) {
 }
 
 async function confirmCollection() {
+  if (kicked) return;
   if (!pendingRow) return;
   const rowId = pendingRow.id;
   const label = pendingRow.display[bundle.primaryField] || Object.values(pendingRow.display)[0] || '';
@@ -1063,14 +1080,17 @@ function renderSearchResults() {
   // Apply search (limited to name + mobile/phone fields for speed)
   if (query) {
     const primaryKey = bundle.primaryField;
-    const mobileKeys = Object.keys((results[0] || {}).display || {}).concat(Object.keys((results[0] || {}).payload || {}))
-      .filter(k => /mobile|phone|hp|contact|tel|handphone/i.test(k));
+    const sample = results[0] || {};
+    const allKeys = Array.from(new Set(
+      Object.keys(sample.display || {}).concat(Object.keys(sample.payload || {}))
+    ));
+    const nameKeys = allKeys.filter(k => /name/i.test(k));
+    const mobileKeys = allKeys.filter(k => /mobile|phone|hp|contact|tel|handphone/i.test(k));
+    const searchKeys = Array.from(new Set([primaryKey, ...nameKeys, ...mobileKeys].filter(Boolean)));
     results = results.filter(r => {
-      const name = (r.display[primaryKey] || r.payload[primaryKey] || '').toLowerCase();
-      if (name.includes(query)) return true;
-      for (const k of mobileKeys) {
-        const v = (r.display[k] || r.payload[k] || '').toString().toLowerCase();
-        if (v.includes(query)) return true;
+      for (const k of searchKeys) {
+        const v = (lookupField(r, k) || '').toString().toLowerCase();
+        if (v && v.includes(query)) return true;
       }
       return false;
     });
@@ -1216,18 +1236,48 @@ async function kickDevice(devId, name) {
   }
 }
 
-// ── Listen for being kicked (non-admin) ──
+// ── Listen for being kicked or session ended ──
 function listenForKick() {
   if (!sessionRef) return;
+  // Targeted kick
   sessionRef.child('kicked/' + deviceId).on('value', snap => {
-    if (snap.exists()) {
-      showToast('You were removed from this session', 'error', 4000);
+    if (snap.exists()) handleKicked('You were removed from this session');
+  });
+  // Session ended by super admin
+  sessionRef.child('meta/endedAt').on('value', snap => {
+    if (snap.exists() && snap.val()) handleKicked('This session has been ended by admin');
+  });
+  // Own presence removed (defensive — e.g. super admin kick-all)
+  sessionRef.child('presence/' + deviceId).on('value', snap => {
+    // Only trigger if we had presence before (avoid firing on initial load)
+    if (!snap.exists() && kicked === false && scanning) {
+      // Delay slightly to avoid race with reconnect
       setTimeout(() => {
-        resetSession();
-        showScreen(1);
+        sessionRef.child('presence/' + deviceId).once('value').then(s2 => {
+          if (!s2.exists()) handleKicked('You were removed from this session');
+        });
       }, 1500);
     }
   });
+}
+
+function handleKicked(message) {
+  if (kicked) return;
+  kicked = true;
+  // Immediately stop the scanner
+  if (scanner) { try { scanner.stop(); } catch (e) {} }
+  scanning = false;
+  // Close any open modals
+  document.getElementById('confirmModal').classList.remove('open');
+  document.getElementById('logPanel').classList.remove('open');
+  document.getElementById('adminPanel2').classList.remove('open');
+  document.getElementById('searchPanel').classList.remove('open');
+  modalOpen = false;
+  showToast(message, 'error', 4000);
+  setTimeout(() => {
+    resetSession();
+    showScreen(1);
+  }, 2000);
 }
 
 // ── Auto-refresh admin panel if open ──

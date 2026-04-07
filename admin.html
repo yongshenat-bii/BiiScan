@@ -455,6 +455,7 @@ function backupAll() {
 async function endSession(code) {
   if (!confirm('End session ' + code + '? This will kick all connected devices.')) return;
   try {
+    await db.ref('sessions/' + code + '/meta/endedAt').set(firebase.database.ServerValue.TIMESTAMP);
     await db.ref('sessions/' + code + '/presence').remove();
     showToast('All devices kicked from ' + code);
   } catch (e) {
